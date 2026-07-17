@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Resume AI | 针对目标岗位修改简历",
+  title: "Resume AI | JD 定向简历改写工作台",
   description:
-    "对照目标 JD 分析简历差距，生成可解释、可编辑的针对性修改建议。",
+    "输入原始简历和目标 JD，生成结构化分析、追问、改写草稿和质量检查。",
 };
 
 export default function RootLayout({
