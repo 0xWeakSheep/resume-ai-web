@@ -1,8 +1,15 @@
 "use client";
 
-import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
 
 type RequestState = "idle" | "loading" | "success" | "error";
+type ExportState = "idle" | "docx" | "pdf";
 
 interface UploadedResumeFile {
   name: string;
@@ -137,15 +144,97 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
+function buildFileName(extension: "docx" | "pdf") {
+  const date = new Date().toISOString().slice(0, 10);
+
+  return `resume-ai-${date}.${extension}`;
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function markdownToHtml(markdown: string) {
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const trimmed = line.trim();
+
+      if (!trimmed) {
+        return "<br />";
+      }
+
+      if (trimmed.startsWith("# ")) {
+        return `<h1>${escapeHtml(trimmed.slice(2))}</h1>`;
+      }
+
+      if (trimmed.startsWith("## ")) {
+        return `<h2>${escapeHtml(trimmed.slice(3))}</h2>`;
+      }
+
+      if (trimmed.startsWith("- ")) {
+        return `<p class="bullet">• ${escapeHtml(trimmed.slice(2))}</p>`;
+      }
+
+      return `<p>${escapeHtml(trimmed)}</p>`;
+    })
+    .join("");
+}
+
+function buildPrintDocument(markdown: string) {
+  return `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>Resume AI Draft</title>
+    <style>
+      @page { margin: 18mm; }
+      body {
+        color: #1f2522;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        line-height: 1.62;
+      }
+      h1 { margin: 0 0 18px; font-size: 26px; }
+      h2 { margin: 22px 0 8px; font-size: 17px; border-bottom: 1px solid #ddd8ce; padding-bottom: 6px; }
+      p { margin: 6px 0; }
+      .bullet { padding-left: 12px; }
+    </style>
+  </head>
+  <body>${markdownToHtml(markdown)}</body>
+</html>`;
+}
+
 export function ResumeWorkbench() {
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [resumeText, setResumeText] = useState(sampleResume);
   const [jobDescription, setJobDescription] = useState(sampleJd);
   const [answers, setAnswers] = useState("");
   const [resumeFile, setResumeFile] = useState<UploadedResumeFile | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
+  const [exportState, setExportState] = useState<ExportState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
   const [result, setResult] = useState<CustomizeResponse | null>(null);
+  const [editableDraft, setEditableDraft] = useState("");
+  const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
 
   const coveragePercent = result
     ? Math.round(result.quality.keywordCoverage.ratio * 100)
@@ -176,6 +265,7 @@ export function ResumeWorkbench() {
     }
 
     setRequestState("loading");
+    setStatusMessage("");
     setErrorMessage("");
 
     try {
@@ -205,11 +295,116 @@ export function ResumeWorkbench() {
 
       const payload = (await response.json()) as CustomizeResponse;
       setResult(payload);
+      setEditableDraft(payload.rewrite.finalResumeMarkdown);
+      setConfirmedAt(null);
       setRequestState("success");
     } catch (error) {
       setRequestState("error");
       setErrorMessage(error instanceof Error ? error.message : "请求失败");
     }
+  }
+
+  function handleClearPersonalData() {
+    setResumeText("");
+    setJobDescription("");
+    setAnswers("");
+    setResumeFile(null);
+    setResult(null);
+    setEditableDraft("");
+    setConfirmedAt(null);
+    setErrorMessage("");
+    setRequestState("idle");
+    setStatusMessage("已清除当前页面中的简历材料、JD、补充信息和生成结果。");
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  function handleConfirmDraft() {
+    setConfirmedAt(new Date().toLocaleString("zh-CN"));
+    setStatusMessage("最终稿已确认，可以导出。");
+  }
+
+  async function handleExportDocx() {
+    if (!editableDraft.trim()) {
+      return;
+    }
+
+    setExportState("docx");
+    setErrorMessage("");
+
+    try {
+      const { Document, HeadingLevel, Packer, Paragraph, TextRun } =
+        await import("docx");
+      const paragraphs = editableDraft.split("\n").map((line) => {
+        const trimmed = line.trim();
+
+        if (trimmed.startsWith("# ")) {
+          return new Paragraph({
+            heading: HeadingLevel.HEADING_1,
+            children: [new TextRun(trimmed.slice(2))],
+          });
+        }
+
+        if (trimmed.startsWith("## ")) {
+          return new Paragraph({
+            heading: HeadingLevel.HEADING_2,
+            children: [new TextRun(trimmed.slice(3))],
+          });
+        }
+
+        if (trimmed.startsWith("- ")) {
+          return new Paragraph({
+            children: [new TextRun(`• ${trimmed.slice(2)}`)],
+          });
+        }
+
+        return new Paragraph({
+          children: [new TextRun(trimmed)],
+        });
+      });
+      const document = new Document({
+        title: result?.rewrite.targetRole ?? "Resume AI Draft",
+        creator: "Resume AI",
+        sections: [{ children: paragraphs }],
+      });
+      const blob = await Packer.toBlob(document);
+
+      downloadBlob(blob, buildFileName("docx"));
+      setStatusMessage("DOCX 已生成。");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "DOCX 导出失败");
+      setRequestState("error");
+    } finally {
+      setExportState("idle");
+    }
+  }
+
+  function handleExportPdf() {
+    if (!editableDraft.trim()) {
+      return;
+    }
+
+    setExportState("pdf");
+    setErrorMessage("");
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      setExportState("idle");
+      setRequestState("error");
+      setErrorMessage("浏览器阻止了 PDF 打印窗口。");
+      return;
+    }
+
+    printWindow.document.write(buildPrintDocument(editableDraft));
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.setTimeout(() => {
+      printWindow.print();
+      setExportState("idle");
+      setStatusMessage("PDF 打印窗口已打开。");
+    }, 150);
   }
 
   return (
@@ -240,6 +435,15 @@ export function ResumeWorkbench() {
                 setJobDescription(sampleJd);
                 setAnswers("");
                 setResumeFile(null);
+                setResult(null);
+                setEditableDraft("");
+                setConfirmedAt(null);
+                setStatusMessage("");
+                setErrorMessage("");
+
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = "";
+                }
               }}
             >
               填入样例
@@ -260,6 +464,7 @@ export function ResumeWorkbench() {
             <input
               accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
               onChange={handleFileChange}
+              ref={fileInputRef}
               type="file"
             />
             <small>{resumeFile ? resumeFile.name : "文本为空时使用上传文件"}</small>
@@ -288,9 +493,18 @@ export function ResumeWorkbench() {
             {requestState === "loading" ? "分析中..." : "生成定制版本"}
           </button>
 
+          <button
+            className="danger-button"
+            onClick={handleClearPersonalData}
+            type="button"
+          >
+            清除材料
+          </button>
+
           {requestState === "error" ? (
             <p className="error-message">{errorMessage}</p>
           ) : null}
+          {statusMessage ? <p className="status-message">{statusMessage}</p> : null}
         </form>
 
         <section className="result-panel">
@@ -362,13 +576,23 @@ export function ResumeWorkbench() {
               <div className="result-section">
                 <div className="section-title">
                   <p className="eyebrow">Rewrite</p>
-                  <h2>改写建议</h2>
+                  <h2>原文与改写对比</h2>
                 </div>
-                <div className="rewrite-list">
+                <div className="comparison-list">
                   {result.rewrite.rewrittenExperienceBullets.map((suggestion) => (
-                    <article className="rewrite-card" key={suggestion.after}>
-                      <p>{suggestion.after}</p>
-                      <small>{suggestion.reason}</small>
+                    <article className="comparison-card" key={suggestion.after}>
+                      <div>
+                        <span>原文证据</span>
+                        <p>{suggestion.before}</p>
+                      </div>
+                      <div>
+                        <span>改写结果</span>
+                        <p>{suggestion.after}</p>
+                      </div>
+                      <div>
+                        <span>修改理由</span>
+                        <p>{suggestion.reason}</p>
+                      </div>
                     </article>
                   ))}
                 </div>
@@ -389,9 +613,50 @@ export function ResumeWorkbench() {
               <div className="result-section">
                 <div className="section-title">
                   <p className="eyebrow">Draft</p>
-                  <h2>定制简历草稿</h2>
+                  <h2>可编辑最终稿</h2>
                 </div>
-                <pre className="markdown-preview">{result.rewrite.finalResumeMarkdown}</pre>
+                <label className="draft-editor">
+                  <span>最终稿 Markdown</span>
+                  <textarea
+                    onChange={(event) => {
+                      setEditableDraft(event.target.value);
+                      setConfirmedAt(null);
+                    }}
+                    rows={18}
+                    value={editableDraft}
+                  />
+                </label>
+                <div className="draft-actions">
+                  <button
+                    className="primary-button compact"
+                    disabled={!editableDraft.trim()}
+                    onClick={handleConfirmDraft}
+                    type="button"
+                  >
+                    确认版本
+                  </button>
+                  <button
+                    className="ghost-button"
+                    disabled={!confirmedAt || exportState !== "idle"}
+                    onClick={handleExportDocx}
+                    type="button"
+                  >
+                    {exportState === "docx" ? "生成中..." : "下载 DOCX"}
+                  </button>
+                  <button
+                    className="ghost-button"
+                    disabled={!confirmedAt || exportState !== "idle"}
+                    onClick={handleExportPdf}
+                    type="button"
+                  >
+                    {exportState === "pdf" ? "打开中..." : "导出 PDF"}
+                  </button>
+                  {confirmedAt ? (
+                    <span className="confirm-state">已确认：{confirmedAt}</span>
+                  ) : (
+                    <span className="confirm-state">编辑后需重新确认</span>
+                  )}
+                </div>
               </div>
             </>
           ) : (

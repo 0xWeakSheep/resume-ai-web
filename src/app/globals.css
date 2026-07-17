@@ -237,7 +237,8 @@ textarea {
 }
 
 .primary-button,
-.ghost-button {
+.ghost-button,
+.danger-button {
   min-height: 2.75rem;
   border-radius: 0.5rem;
   font-weight: 700;
@@ -253,6 +254,11 @@ textarea {
   background: var(--accent-hover);
 }
 
+.primary-button.compact {
+  min-height: 2.5rem;
+  padding-inline: 0.9rem;
+}
+
 .ghost-button {
   border: 1px solid var(--line);
   background: var(--surface-raised);
@@ -264,11 +270,30 @@ textarea {
   border-color: var(--accent);
 }
 
+.danger-button {
+  border: 1px solid var(--danger-soft);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.danger-button:hover {
+  border-color: var(--danger);
+}
+
 .error-message {
   margin: 0;
   border-radius: 0.5rem;
   background: var(--danger-soft);
   color: var(--danger);
+  padding: 0.85rem;
+  line-height: 1.5;
+}
+
+.status-message {
+  margin: 0;
+  border-radius: 0.5rem;
+  background: var(--accent-soft);
+  color: var(--accent);
   padding: 0.85rem;
   line-height: 1.5;
 }
@@ -335,13 +360,15 @@ textarea {
 }
 
 .mapping-list,
-.rewrite-list {
+.rewrite-list,
+.comparison-list {
   display: grid;
   gap: 0.75rem;
 }
 
 .mapping-card,
-.rewrite-card {
+.rewrite-card,
+.comparison-card {
   display: grid;
   gap: 0.6rem;
   border: 1px solid var(--line);
@@ -367,6 +394,37 @@ textarea {
 .rewrite-card small {
   color: var(--muted);
   line-height: 1.5;
+}
+
+.comparison-card {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.comparison-card > div {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.9rem;
+}
+
+.comparison-card > div + div {
+  border-left: 1px solid var(--line);
+}
+
+.comparison-card span,
+.draft-editor span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.comparison-card p {
+  margin: 0;
+  line-height: 1.6;
 }
 
 .status-pill.matched {
@@ -407,6 +465,41 @@ textarea {
   font-size: 0.875rem;
   line-height: 1.65;
   white-space: pre-wrap;
+}
+
+.draft-editor {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.draft-editor textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface-raised);
+  color: var(--foreground);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.875rem;
+  line-height: 1.65;
+  padding: 1rem;
+  outline: none;
+}
+
+.draft-editor textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.confirm-state {
+  color: var(--muted);
+  font-size: 0.875rem;
 }
 
 .empty-state {
@@ -451,6 +544,15 @@ textarea {
   }
 
   .score-strip > div + div {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .comparison-card {
+    grid-template-columns: 1fr;
+  }
+
+  .comparison-card > div + div {
     border-top: 1px solid var(--line);
     border-left: 0;
   }
