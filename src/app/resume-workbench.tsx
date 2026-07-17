@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useMemo,
   useRef,
@@ -10,6 +11,7 @@ import {
 
 type RequestState = "idle" | "loading" | "success" | "error";
 type ExportState = "idle" | "docx" | "pdf";
+type ActivePanel = "analysis" | "review" | "quality";
 
 interface UploadedResumeFile {
   name: string;
@@ -230,6 +232,7 @@ export function ResumeWorkbench() {
   const [resumeFile, setResumeFile] = useState<UploadedResumeFile | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [exportState, setExportState] = useState<ExportState>("idle");
+  const [activePanel, setActivePanel] = useState<ActivePanel>("analysis");
   const [errorMessage, setErrorMessage] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [result, setResult] = useState<CustomizeResponse | null>(null);
@@ -239,6 +242,9 @@ export function ResumeWorkbench() {
   const coveragePercent = result
     ? Math.round(result.quality.keywordCoverage.ratio * 100)
     : 0;
+  const draftChanged = result
+    ? editableDraft !== result.rewrite.finalResumeMarkdown
+    : false;
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -297,6 +303,7 @@ export function ResumeWorkbench() {
       setResult(payload);
       setEditableDraft(payload.rewrite.finalResumeMarkdown);
       setConfirmedAt(null);
+      setActivePanel("analysis");
       setRequestState("success");
     } catch (error) {
       setRequestState("error");
@@ -312,6 +319,7 @@ export function ResumeWorkbench() {
     setResult(null);
     setEditableDraft("");
     setConfirmedAt(null);
+    setActivePanel("analysis");
     setErrorMessage("");
     setRequestState("idle");
     setStatusMessage("已清除当前页面中的简历材料、JD、补充信息和生成结果。");
@@ -323,7 +331,35 @@ export function ResumeWorkbench() {
 
   function handleConfirmDraft() {
     setConfirmedAt(new Date().toLocaleString("zh-CN"));
+    setActivePanel("review");
     setStatusMessage("最终稿已确认，可以导出。");
+  }
+
+  function handleUseQuestion(question: string) {
+    setAnswers((current) => {
+      const nextLine = `待补充：${question}`;
+      return current.trim() ? `${current.trim()}\n${nextLine}` : nextLine;
+    });
+    setStatusMessage("追问已加入补充信息区，补充事实后可重新生成。");
+  }
+
+  function handleResetDraft() {
+    if (!result) {
+      return;
+    }
+
+    setEditableDraft(result.rewrite.finalResumeMarkdown);
+    setConfirmedAt(null);
+    setStatusMessage("已恢复 AI 草稿。");
+  }
+
+  async function handleCopyDraft() {
+    if (!editableDraft.trim()) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(editableDraft);
+    setStatusMessage("Markdown 已复制。");
   }
 
   async function handleExportDocx() {
@@ -411,7 +447,9 @@ export function ResumeWorkbench() {
     <main className="min-h-dvh">
       <header className="app-header">
         <div>
-          <p className="eyebrow">Resume AI</p>
+          <Link className="back-link" href="/">
+            返回首页
+          </Link>
           <h1>JD 定向简历改写工作台</h1>
         </div>
         <div className="api-state">
@@ -438,6 +476,7 @@ export function ResumeWorkbench() {
                 setResult(null);
                 setEditableDraft("");
                 setConfirmedAt(null);
+                setActivePanel("analysis");
                 setStatusMessage("");
                 setErrorMessage("");
 
@@ -510,9 +549,33 @@ export function ResumeWorkbench() {
         <section className="result-panel">
           {result ? (
             <>
+              <div className="workflow-tabs" aria-label="处理流程">
+                <button
+                  className={activePanel === "analysis" ? "active" : ""}
+                  onClick={() => setActivePanel("analysis")}
+                  type="button"
+                >
+                  匹配分析
+                </button>
+                <button
+                  className={activePanel === "quality" ? "active" : ""}
+                  onClick={() => setActivePanel("quality")}
+                  type="button"
+                >
+                  质量检查
+                </button>
+                <button
+                  className={activePanel === "review" ? "active" : ""}
+                  onClick={() => setActivePanel("review")}
+                  type="button"
+                >
+                  审核导出
+                </button>
+              </div>
+
               <div className="score-strip">
                 <div>
-                  <p className="eyebrow">Coverage</p>
+                  <p className="metric-label">关键词覆盖</p>
                   <strong>{coveragePercent}%</strong>
                   <span>
                     {result.quality.keywordCoverage.matched}/
@@ -520,144 +583,221 @@ export function ResumeWorkbench() {
                   </span>
                 </div>
                 <div>
-                  <p className="eyebrow">Fact Risk</p>
+                  <p className="metric-label">事实风险</p>
                   <strong>{result.quality.factConsistency.riskLevel}</strong>
                   <span>事实一致性</span>
                 </div>
                 <div>
-                  <p className="eyebrow">Readability</p>
+                  <p className="metric-label">可读性</p>
                   <strong>{result.quality.readability.score}</strong>
                   <span>可读性评分</span>
                 </div>
               </div>
 
-              <div className="result-section">
-                <div className="section-title">
-                  <p className="eyebrow">Role</p>
-                  <h2>{result.rewrite.targetRole}</h2>
-                </div>
-                <div className="keyword-row">
-                  {result.analysis.matchedKeywords.map((keyword) => (
-                    <span className="keyword matched-keyword" key={keyword}>
-                      {keyword}
-                    </span>
-                  ))}
-                  {result.analysis.missingKeywords.slice(0, 10).map((keyword) => (
-                    <span className="keyword missing-keyword" key={keyword}>
-                      {keyword}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="result-section">
-                <div className="section-title">
-                  <p className="eyebrow">Mapping</p>
-                  <h2>岗位要求映射</h2>
-                </div>
-                <div className="mapping-list">
-                  {result.analysis.requirementMappings.map((mapping) => (
-                    <article className="mapping-card" key={mapping.requirementId}>
-                      <div className="mapping-card-head">
-                        <span className={statusClassName[mapping.status]}>
-                          {statusLabel[mapping.status]}
+              {activePanel === "analysis" ? (
+                <>
+                  <div className="result-section">
+                    <div className="section-title">
+                      <h2>{result.rewrite.targetRole}</h2>
+                    </div>
+                    <div className="keyword-row">
+                      {result.analysis.matchedKeywords.map((keyword) => (
+                        <span className="keyword matched-keyword" key={keyword}>
+                          {keyword}
                         </span>
-                        <code>{mapping.requirementId}</code>
-                      </div>
-                      <p>{mapping.requirement}</p>
-                      {mapping.evidence.length > 0 ? (
-                        <small>{mapping.evidence[0]}</small>
-                      ) : null}
-                    </article>
-                  ))}
-                </div>
-              </div>
+                      ))}
+                      {result.analysis.missingKeywords
+                        .slice(0, 10)
+                        .map((keyword) => (
+                          <span className="keyword missing-keyword" key={keyword}>
+                            {keyword}
+                          </span>
+                        ))}
+                    </div>
+                  </div>
 
-              <div className="result-section">
-                <div className="section-title">
-                  <p className="eyebrow">Rewrite</p>
-                  <h2>原文与改写对比</h2>
-                </div>
-                <div className="comparison-list">
-                  {result.rewrite.rewrittenExperienceBullets.map((suggestion) => (
-                    <article className="comparison-card" key={suggestion.after}>
-                      <div>
-                        <span>原文证据</span>
-                        <p>{suggestion.before}</p>
-                      </div>
-                      <div>
-                        <span>改写结果</span>
-                        <p>{suggestion.after}</p>
-                      </div>
-                      <div>
-                        <span>修改理由</span>
-                        <p>{suggestion.reason}</p>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </div>
+                  <div className="result-section">
+                    <div className="section-title">
+                      <h2>岗位要求映射</h2>
+                    </div>
+                    <div className="mapping-list">
+                      {result.analysis.requirementMappings.map((mapping) => (
+                        <article
+                          className="mapping-card"
+                          key={mapping.requirementId}
+                        >
+                          <div className="mapping-card-head">
+                            <span className={statusClassName[mapping.status]}>
+                              {statusLabel[mapping.status]}
+                            </span>
+                            <code>{mapping.requirementId}</code>
+                          </div>
+                          <p>{mapping.requirement}</p>
+                          {mapping.evidence.length > 0 ? (
+                            <small>{mapping.evidence[0]}</small>
+                          ) : (
+                            <small>{mapping.recommendation}</small>
+                          )}
+                        </article>
+                      ))}
+                    </div>
+                  </div>
 
-              <div className="result-section">
-                <div className="section-title">
-                  <p className="eyebrow">Questions</p>
-                  <h2>补充追问</h2>
-                </div>
-                <ul className="question-list">
-                  {result.analysis.followUpQuestions.map((question) => (
-                    <li key={question}>{question}</li>
-                  ))}
-                </ul>
-              </div>
+                  <div className="result-section">
+                    <div className="section-title">
+                      <h2>补充追问</h2>
+                    </div>
+                    <div className="question-list">
+                      {result.analysis.followUpQuestions.map((question) => (
+                        <article className="question-card" key={question}>
+                          <p>{question}</p>
+                          <button
+                            className="ghost-button"
+                            onClick={() => handleUseQuestion(question)}
+                            type="button"
+                          >
+                            加入补充区
+                          </button>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : null}
 
-              <div className="result-section">
-                <div className="section-title">
-                  <p className="eyebrow">Draft</p>
-                  <h2>可编辑最终稿</h2>
-                </div>
-                <label className="draft-editor">
-                  <span>最终稿 Markdown</span>
-                  <textarea
-                    onChange={(event) => {
-                      setEditableDraft(event.target.value);
-                      setConfirmedAt(null);
-                    }}
-                    rows={18}
-                    value={editableDraft}
-                  />
-                </label>
-                <div className="draft-actions">
-                  <button
-                    className="primary-button compact"
-                    disabled={!editableDraft.trim()}
-                    onClick={handleConfirmDraft}
-                    type="button"
-                  >
-                    确认版本
-                  </button>
-                  <button
-                    className="ghost-button"
-                    disabled={!confirmedAt || exportState !== "idle"}
-                    onClick={handleExportDocx}
-                    type="button"
-                  >
-                    {exportState === "docx" ? "生成中..." : "下载 DOCX"}
-                  </button>
-                  <button
-                    className="ghost-button"
-                    disabled={!confirmedAt || exportState !== "idle"}
-                    onClick={handleExportPdf}
-                    type="button"
-                  >
-                    {exportState === "pdf" ? "打开中..." : "导出 PDF"}
-                  </button>
-                  {confirmedAt ? (
-                    <span className="confirm-state">已确认：{confirmedAt}</span>
-                  ) : (
-                    <span className="confirm-state">编辑后需重新确认</span>
-                  )}
-                </div>
-              </div>
+              {activePanel === "quality" ? (
+                <>
+                  <div className="result-section">
+                    <div className="section-title">
+                      <h2>事实边界</h2>
+                    </div>
+                    <div className="quality-list">
+                      {result.quality.factConsistency.issues.map((issue) => (
+                        <article className="quality-card" key={issue}>
+                          <span>事实一致性</span>
+                          <p>{issue}</p>
+                        </article>
+                      ))}
+                      {result.quality.formatChecks.map((check) => (
+                        <article className="quality-card" key={check.name}>
+                          <span>{check.passed ? "通过" : "需检查"}</span>
+                          <p>
+                            {check.name}：{check.detail}
+                          </p>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="result-section">
+                    <div className="section-title">
+                      <h2>人工审核清单</h2>
+                    </div>
+                    <ul className="review-checklist">
+                      {result.quality.manualReviewChecklist.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              ) : null}
+
+              {activePanel === "review" ? (
+                <>
+                  <div className="result-section">
+                    <div className="section-title">
+                      <h2>原文与改写对比</h2>
+                    </div>
+                    <div className="comparison-list">
+                      {result.rewrite.rewrittenExperienceBullets.map(
+                        (suggestion) => (
+                          <article
+                            className="comparison-card"
+                            key={suggestion.after}
+                          >
+                            <div>
+                              <span>原文证据</span>
+                              <p>{suggestion.before}</p>
+                            </div>
+                            <div>
+                              <span>改写结果</span>
+                              <p>{suggestion.after}</p>
+                            </div>
+                            <div>
+                              <span>修改理由</span>
+                              <p>{suggestion.reason}</p>
+                            </div>
+                          </article>
+                        ),
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="result-section">
+                    <div className="section-title">
+                      <h2>可编辑最终稿</h2>
+                    </div>
+                    <label className="draft-editor">
+                      <span>最终稿 Markdown</span>
+                      <textarea
+                        onChange={(event) => {
+                          setEditableDraft(event.target.value);
+                          setConfirmedAt(null);
+                        }}
+                        rows={18}
+                        value={editableDraft}
+                      />
+                    </label>
+                    <div className="draft-actions">
+                      <button
+                        className="primary-button compact"
+                        disabled={!editableDraft.trim()}
+                        onClick={handleConfirmDraft}
+                        type="button"
+                      >
+                        确认版本
+                      </button>
+                      <button
+                        className="ghost-button"
+                        disabled={!draftChanged}
+                        onClick={handleResetDraft}
+                        type="button"
+                      >
+                        恢复草稿
+                      </button>
+                      <button
+                        className="ghost-button"
+                        disabled={!editableDraft.trim()}
+                        onClick={handleCopyDraft}
+                        type="button"
+                      >
+                        复制 Markdown
+                      </button>
+                      <button
+                        className="ghost-button"
+                        disabled={!confirmedAt || exportState !== "idle"}
+                        onClick={handleExportDocx}
+                        type="button"
+                      >
+                        {exportState === "docx" ? "生成中..." : "下载 DOCX"}
+                      </button>
+                      <button
+                        className="ghost-button"
+                        disabled={!confirmedAt || exportState !== "idle"}
+                        onClick={handleExportPdf}
+                        type="button"
+                      >
+                        {exportState === "pdf" ? "打开中..." : "导出 PDF"}
+                      </button>
+                      {confirmedAt ? (
+                        <span className="confirm-state">已确认：{confirmedAt}</span>
+                      ) : (
+                        <span className="confirm-state">编辑后需重新确认</span>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : null}
             </>
           ) : (
             <div className="empty-state">
