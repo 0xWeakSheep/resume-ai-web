@@ -128,6 +128,15 @@ interface RewriteSuggestion {
   after: string;
   reason: string;
   evidence: string;
+  sourceFactIds?: string[];
+}
+
+interface SourceFactReference {
+  id: string;
+  category: CareerFactCategory;
+  detail: string;
+  evidence: string;
+  confidence: "high" | "medium" | "low";
 }
 
 interface CustomizeResponse {
@@ -159,6 +168,7 @@ interface CustomizeResponse {
     tailoredSummary: string[];
     rewrittenExperienceBullets: RewriteSuggestion[];
     skillsToEmphasize: string[];
+    sourceFacts?: SourceFactReference[];
     finalResumeMarkdown: string;
     modificationReasons: string[];
   };
@@ -186,6 +196,16 @@ interface CustomizeResponse {
     }>;
     manualReviewChecklist: string[];
   };
+}
+
+interface SelectedJobContext {
+  id: string;
+  roleTitle: string;
+  company?: string;
+  priorityRank?: number;
+  score?: number;
+  level?: JobMatchReport["level"];
+  filterStatus?: JobFilterStatus;
 }
 
 const sampleResume = `张三
@@ -445,6 +465,9 @@ export function ResumeWorkbench() {
   const [jobResponse, setJobResponse] = useState<JobStandardizeResponse | null>(
     null,
   );
+  const [selectedJob, setSelectedJob] = useState<SelectedJobContext | null>(
+    null,
+  );
   const [editableDraft, setEditableDraft] = useState("");
   const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
 
@@ -677,6 +700,7 @@ export function ResumeWorkbench() {
     setFactState("idle");
     setJobResponse(null);
     setJobState("idle");
+    setSelectedJob(null);
     setResult(null);
     setEditableDraft("");
     setConfirmedAt(null);
@@ -716,6 +740,15 @@ export function ResumeWorkbench() {
     }
 
     setJobDescription(nextJobDescription);
+    setSelectedJob({
+      id: job.id,
+      roleTitle: job.roleTitle,
+      company: job.company,
+      priorityRank: job.priorityRank,
+      score: job.match?.score,
+      level: job.match?.level,
+      filterStatus: job.filterStatus,
+    });
     resetGeneratedResume();
     setStatusMessage(
       `已选择 ${job.roleTitle}${job.company ? `｜${job.company}` : ""} 作为目标 JD。`,
@@ -858,6 +891,7 @@ export function ResumeWorkbench() {
                 setFactState("idle");
                 setJobResponse(null);
                 setJobState("idle");
+                setSelectedJob(null);
                 setResult(null);
                 setEditableDraft("");
                 setConfirmedAt(null);
@@ -989,6 +1023,7 @@ export function ResumeWorkbench() {
                   setJobBatchInput(event.target.value);
                   setJobResponse(null);
                   setJobState("idle");
+                  setSelectedJob(null);
                 }}
                 placeholder="多个 JD 文本用空行分隔；多个链接可以逐行粘贴。"
                 rows={8}
@@ -1176,12 +1211,39 @@ export function ResumeWorkbench() {
             )}
           </section>
 
+          {selectedJob ? (
+            <section className="selected-job-card">
+              <div>
+                <p className="eyebrow">Selected Priority JD</p>
+                <h3>
+                  {selectedJob.priorityRank
+                    ? `#${selectedJob.priorityRank}｜`
+                    : ""}
+                  {selectedJob.roleTitle}
+                </h3>
+                <p>
+                  {selectedJob.company ? `${selectedJob.company}｜` : ""}
+                  {selectedJob.score !== undefined
+                    ? `匹配分 ${selectedJob.score}`
+                    : "未计算匹配分"}
+                  {selectedJob.level ? `｜${selectedJob.level}` : ""}
+                </p>
+              </div>
+              {selectedJob.filterStatus ? (
+                <span className={jobFilterClassName[selectedJob.filterStatus]}>
+                  {jobFilterLabel[selectedJob.filterStatus]}
+                </span>
+              ) : null}
+            </section>
+          ) : null}
+
           <label className="field">
             <span>目标 JD</span>
             <textarea
               value={jobDescription}
               onChange={(event) => {
                 setJobDescription(event.target.value);
+                setSelectedJob(null);
                 resetGeneratedResume();
               }}
               rows={10}
@@ -1202,7 +1264,11 @@ export function ResumeWorkbench() {
           </label>
 
           <button className="primary-button" disabled={requestState === "loading"}>
-            {requestState === "loading" ? "分析中..." : "生成定制版本"}
+            {requestState === "loading"
+              ? "分析中..."
+              : selectedJob
+                ? "生成高优先级定制版本"
+                : "生成定制版本"}
           </button>
 
           <button
@@ -1275,6 +1341,18 @@ export function ResumeWorkbench() {
                     <div className="section-title">
                       <h2>{result.rewrite.targetRole}</h2>
                     </div>
+                    {selectedJob ? (
+                      <p className="selected-job-note">
+                        基于已选高优先级 JD：
+                        {selectedJob.priorityRank
+                          ? `#${selectedJob.priorityRank}｜`
+                          : ""}
+                        {selectedJob.roleTitle}
+                        {selectedJob.score !== undefined
+                          ? `｜匹配分 ${selectedJob.score}`
+                          : ""}
+                      </p>
+                    ) : null}
                     <div className="keyword-row">
                       {result.analysis.matchedKeywords.map((keyword) => (
                         <span className="keyword matched-keyword" key={keyword}>
@@ -1317,6 +1395,29 @@ export function ResumeWorkbench() {
                       ))}
                     </div>
                   </div>
+
+                  {result.rewrite.sourceFacts?.length ? (
+                    <div className="result-section">
+                      <div className="section-title">
+                        <h2>职业事实依据</h2>
+                      </div>
+                      <div className="source-fact-list">
+                        {result.rewrite.sourceFacts.slice(0, 8).map((fact) => (
+                          <article className="source-fact-card" key={fact.id}>
+                            <div>
+                              <span>{fact.id}</span>
+                              <strong>{fact.detail}</strong>
+                            </div>
+                            <p>证据：{fact.evidence}</p>
+                            <small>
+                              {factCategoryLabel[fact.category]}｜
+                              {fact.confidence}
+                            </small>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div className="result-section">
                     <div className="section-title">
@@ -1401,6 +1502,12 @@ export function ResumeWorkbench() {
                             <div>
                               <span>修改理由</span>
                               <p>{suggestion.reason}</p>
+                              {suggestion.sourceFactIds?.length ? (
+                                <small>
+                                  引用事实：
+                                  {suggestion.sourceFactIds.join("、")}
+                                </small>
+                              ) : null}
                             </div>
                           </article>
                         ),

@@ -526,6 +526,29 @@ textarea {
   padding: 0.9rem;
 }
 
+.selected-job-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--accent-soft) 34%, var(--surface-raised));
+  padding: 0.9rem;
+}
+
+.selected-job-card h3 {
+  margin: 0.15rem 0 0;
+  font-size: 1.05rem;
+}
+
+.selected-job-card p,
+.selected-job-note {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .fact-base-header {
   display: flex;
   align-items: flex-start;
@@ -942,14 +965,16 @@ textarea {
 
 .mapping-list,
 .rewrite-list,
-.comparison-list {
+.comparison-list,
+.source-fact-list {
   display: grid;
   gap: 0.75rem;
 }
 
 .mapping-card,
 .rewrite-card,
-.comparison-card {
+.comparison-card,
+.source-fact-card {
   display: grid;
   gap: 0.6rem;
   border: 1px solid var(--line);
@@ -1006,6 +1031,38 @@ textarea {
 .comparison-card p {
   margin: 0;
   line-height: 1.6;
+}
+
+.comparison-card small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.source-fact-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 7rem;
+}
+
+.source-fact-card div {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.source-fact-card span,
+.source-fact-card small {
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.78rem;
+}
+
+.source-fact-card strong {
+  line-height: 1.45;
+}
+
+.source-fact-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
 }
 
 .status-pill.matched {
@@ -1208,6 +1265,10 @@ textarea {
   }
 
   .job-card-head {
+    flex-direction: column;
+  }
+
+  .selected-job-card {
     flex-direction: column;
   }
 
