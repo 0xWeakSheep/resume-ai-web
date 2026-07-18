@@ -1,6 +1,27 @@
 import Link from "next/link";
+import { Noto_Sans_SC, Space_Grotesk } from "next/font/google";
 import { HeroSignalCanvas } from "./hero-signal-canvas";
 import styles from "./home.module.css";
+
+// 首页局部字体：中文正文与标题用 Noto Sans SC（可变字重），
+// 英文品牌、数字与微型标签用 Space Grotesk。
+// 通过 CSS variables 注入首页 shell，不影响工作台。
+// Noto Sans SC 的 CJK 子集较大，关闭 preload 以控制首屏负担，
+// font-display: swap 保证文字立即可见。
+const notoSansSC = Noto_Sans_SC({
+  subsets: ["latin"],
+  weight: "variable",
+  display: "swap",
+  variable: "--font-home-sans",
+  preload: false,
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  weight: "variable",
+  display: "swap",
+  variable: "--font-home-grotesk",
+});
 
 const principles = [
   {
@@ -27,28 +48,28 @@ const principles = [
 
 const productFlow = [
   {
-    step: "第 1 步",
+    step: "提交",
     title: "提交简历与目标 JD",
     body: "粘贴或上传现有简历，填入目标岗位描述。",
   },
   {
-    step: "第 2 步",
+    step: "映射",
     title: "查看岗位要求映射",
     body: "看到每条要求与你有的事实之间的对应关系和缺口。",
   },
   {
-    step: "第 3 步",
+    step: "补充",
     title: "回答缺口追问",
     body: "只补充真实发生过的细节，系统据此补全证据链。",
   },
   {
-    step: "第 4 步",
+    step: "确认",
     title: "确认终稿并导出",
     body: "逐条审核改写记录，确认后导出定制简历。",
   },
 ] as const;
 
-const trustPoints = [
+const proofPoints = [
   "不虚构任何经历",
   "每条改写附原文证据",
   "导出前由你人工确认",
@@ -56,7 +77,9 @@ const trustPoints = [
 
 export default function Home() {
   return (
-    <main className={styles.shell}>
+    <main
+      className={`${styles.shell} ${notoSansSC.variable} ${spaceGrotesk.variable}`}
+    >
       <a className={styles.skipLink} href="#main-content">
         跳到主要内容
       </a>
@@ -106,14 +129,13 @@ export default function Home() {
             <div className={styles.heroContent}>
               <p className={styles.heroLabel}>JD 定向简历改写 · 事实驱动</p>
               <h1 className={styles.heroTitle} id="hero-title">
-                把真实经历，
-                <br />
-                映射成岗位
-                <span className={styles.heroTitleAccent}>要的答案。</span>
+                <span className={styles.heroLine}>让真实经历，</span>
+                <span className={styles.heroLine}>
+                  <span className={styles.heroTitleAccent}>精准回应岗位。</span>
+                </span>
               </h1>
               <p className={styles.heroLede}>
-                Resume AI 拆解目标 JD 的职责与筛选信号，只引用你可以证明的经历，
-                生成逐条可追溯、可审核、可导出的定制简历。
+                拆解目标 JD，只用可验证事实，生成可追溯、可审核的定制简历。
               </p>
               <div className={styles.actions}>
                 <Link className={styles.primaryBtn} href="/workbench">
@@ -126,15 +148,18 @@ export default function Home() {
                   了解工作原理
                 </a>
               </div>
-              <ul className={styles.trustRow}>
-                {trustPoints.map((point) => (
-                  <li className={styles.trustItem} key={point}>
-                    {point}
-                  </li>
-                ))}
-              </ul>
             </div>
           </div>
+        </section>
+
+        <section className={styles.proofRail} aria-label="可信承诺">
+          <ul className={styles.proofList}>
+            {proofPoints.map((point) => (
+              <li className={styles.proofItem} key={point}>
+                {point}
+              </li>
+            ))}
+          </ul>
         </section>
 
         <section
@@ -176,7 +201,6 @@ export default function Home() {
         >
           <div className={styles.workflowInner}>
             <div className={styles.sectionHead}>
-              <p className={styles.sectionIndex}>流程 / Workflow</p>
               <h2 className={styles.sectionTitle} id="workflow-title">
                 四步，从简历到终稿。
               </h2>
@@ -185,7 +209,7 @@ export default function Home() {
                 补充真实信息、确认并导出。
               </p>
               <Link className={styles.primaryBtn} href="/workbench">
-                打开工作台
+                进入工作台
                 <span className={styles.btnArrow} aria-hidden="true">
                   →
                 </span>
@@ -206,12 +230,11 @@ export default function Home() {
         </section>
 
         <section className={styles.closingSection} aria-labelledby="closing-title">
-          <p className={styles.sectionIndex}>开始 / Start</p>
           <h2 className={styles.closingTitle} id="closing-title">
             下一次投递，用证据说话。
           </h2>
           <Link className={styles.primaryBtn} href="/workbench">
-            免费进入工作台
+            进入工作台
             <span className={styles.btnArrow} aria-hidden="true">
               →
             </span>
@@ -221,9 +244,9 @@ export default function Home() {
 
       <footer className={styles.footer}>
         <span className={styles.footerBrand}>Resume AI</span>
-        <span>真实经历 · 岗位映射 · 人工可审</span>
+        <span className={styles.footerNote}>真实经历，岗位映射，人工可审</span>
         <Link className={styles.footerLink} href="/workbench">
-          工作台
+          进入工作台
         </Link>
       </footer>
     </main>
