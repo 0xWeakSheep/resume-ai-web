@@ -12,11 +12,42 @@ import {
 type RequestState = "idle" | "loading" | "success" | "error";
 type ExportState = "idle" | "docx" | "pdf";
 type ActivePanel = "analysis" | "review" | "quality";
+type CareerFactCategory =
+  | "profile"
+  | "experience"
+  | "education"
+  | "skill"
+  | "metric"
+  | "keyword";
 
 interface UploadedResumeFile {
   name: string;
   mimeType?: string;
   dataBase64: string;
+}
+
+interface ResumePayload {
+  text?: string;
+  file?: UploadedResumeFile;
+}
+
+interface CareerFact {
+  id: string;
+  category: CareerFactCategory;
+  title: string;
+  detail: string;
+  evidence: string;
+  confidence: "high" | "medium" | "low";
+}
+
+interface FactResponse {
+  factBase: {
+    sourceType: "pdf" | "docx" | "text" | "plain-text";
+    totalFacts: number;
+    facts: CareerFact[];
+    grouped: Record<CareerFactCategory, CareerFact[]>;
+    warnings: string[];
+  };
 }
 
 interface RequirementMapping {
@@ -124,8 +155,43 @@ const statusClassName: Record<RequirementMapping["status"], string> = {
   missing: "status-pill missing",
 };
 
+const factCategoryOrder: CareerFactCategory[] = [
+  "profile",
+  "experience",
+  "education",
+  "skill",
+  "metric",
+  "keyword",
+];
+
+const factCategoryLabel: Record<CareerFactCategory, string> = {
+  profile: "基础信息",
+  experience: "经历事实",
+  education: "教育经历",
+  skill: "技能能力",
+  metric: "量化成果",
+  keyword: "关键词",
+};
+
 function getApiBaseUrl() {
   return (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
+}
+
+function buildResumePayload(
+  resumeText: string,
+  resumeFile: UploadedResumeFile | null,
+): ResumePayload | null {
+  const trimmedResume = resumeText.trim();
+
+  if (trimmedResume) {
+    return { text: resumeText };
+  }
+
+  if (resumeFile) {
+    return { file: resumeFile };
+  }
+
+  return null;
 }
 
 function readFileAsBase64(file: File): Promise<string> {
@@ -231,11 +297,13 @@ export function ResumeWorkbench() {
   const [answers, setAnswers] = useState("");
   const [resumeFile, setResumeFile] = useState<UploadedResumeFile | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
+  const [factState, setFactState] = useState<RequestState>("idle");
   const [exportState, setExportState] = useState<ExportState>("idle");
   const [activePanel, setActivePanel] = useState<ActivePanel>("analysis");
   const [errorMessage, setErrorMessage] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [result, setResult] = useState<CustomizeResponse | null>(null);
+  const [factResponse, setFactResponse] = useState<FactResponse | null>(null);
   const [editableDraft, setEditableDraft] = useState("");
   const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
 
@@ -245,11 +313,29 @@ export function ResumeWorkbench() {
   const draftChanged = result
     ? editableDraft !== result.rewrite.finalResumeMarkdown
     : false;
+  const visibleFactGroups = useMemo(
+    () =>
+      factResponse
+        ? factCategoryOrder
+            .map((category) => ({
+              category,
+              facts: factResponse.factBase.grouped[category],
+            }))
+            .filter((group) => group.facts.length > 0)
+        : [],
+    [factResponse],
+  );
+
+  function resetFactBase() {
+    setFactResponse(null);
+    setFactState("idle");
+  }
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) {
       setResumeFile(null);
+      resetFactBase();
       return;
     }
 
@@ -259,6 +345,61 @@ export function ResumeWorkbench() {
       mimeType: file.type,
       dataBase64,
     });
+    resetFactBase();
+  }
+
+  async function handleExtractFacts() {
+    if (!apiBaseUrl) {
+      setFactState("error");
+      setErrorMessage("缺少 NEXT_PUBLIC_API_BASE_URL，前端无法连接后端。");
+      return;
+    }
+
+    const resumePayload = buildResumePayload(resumeText, resumeFile);
+    if (!resumePayload) {
+      setFactState("error");
+      setErrorMessage("请先填写简历文本，或上传 PDF / DOCX / TXT 文件。");
+      return;
+    }
+
+    setFactState("loading");
+    setStatusMessage("");
+    setErrorMessage("");
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/resume/facts`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          resume: resumePayload,
+          answers,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorBody = (await response.json().catch(() => null)) as {
+          message?: string | string[];
+        } | null;
+        const message = Array.isArray(errorBody?.message)
+          ? errorBody.message.join("；")
+          : errorBody?.message;
+        throw new Error(message || `事实库生成失败：${response.status}`);
+      }
+
+      const payload = (await response.json()) as FactResponse;
+      setFactResponse(payload);
+      setFactState("success");
+      setStatusMessage(
+        `已生成 ${payload.factBase.totalFacts} 条结构化职业事实。`,
+      );
+    } catch (error) {
+      setFactState("error");
+      setErrorMessage(
+        error instanceof Error ? error.message : "事实库生成失败",
+      );
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -267,6 +408,13 @@ export function ResumeWorkbench() {
     if (!apiBaseUrl) {
       setRequestState("error");
       setErrorMessage("缺少 NEXT_PUBLIC_API_BASE_URL，前端无法连接后端。");
+      return;
+    }
+
+    const resumePayload = buildResumePayload(resumeText, resumeFile);
+    if (!resumePayload) {
+      setRequestState("error");
+      setErrorMessage("请先填写简历文本，或上传 PDF / DOCX / TXT 文件。");
       return;
     }
 
@@ -281,9 +429,7 @@ export function ResumeWorkbench() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          resume: resumeText.trim()
-            ? { text: resumeText }
-            : { file: resumeFile },
+          resume: resumePayload,
           jobDescription,
           answers,
         }),
@@ -316,6 +462,8 @@ export function ResumeWorkbench() {
     setJobDescription("");
     setAnswers("");
     setResumeFile(null);
+    setFactResponse(null);
+    setFactState("idle");
     setResult(null);
     setEditableDraft("");
     setConfirmedAt(null);
@@ -340,6 +488,7 @@ export function ResumeWorkbench() {
       const nextLine = `待补充：${question}`;
       return current.trim() ? `${current.trim()}\n${nextLine}` : nextLine;
     });
+    resetFactBase();
     setStatusMessage("追问已加入补充信息区，补充事实后可重新生成。");
   }
 
@@ -473,6 +622,8 @@ export function ResumeWorkbench() {
                 setJobDescription(sampleJd);
                 setAnswers("");
                 setResumeFile(null);
+                setFactResponse(null);
+                setFactState("idle");
                 setResult(null);
                 setEditableDraft("");
                 setConfirmedAt(null);
@@ -493,7 +644,10 @@ export function ResumeWorkbench() {
             <span>简历文本</span>
             <textarea
               value={resumeText}
-              onChange={(event) => setResumeText(event.target.value)}
+              onChange={(event) => {
+                setResumeText(event.target.value);
+                resetFactBase();
+              }}
               rows={12}
             />
           </label>
@@ -509,6 +663,75 @@ export function ResumeWorkbench() {
             <small>{resumeFile ? resumeFile.name : "文本为空时使用上传文件"}</small>
           </label>
 
+          <section className="fact-base-card" aria-live="polite">
+            <div className="fact-base-header">
+              <div>
+                <p className="eyebrow">P0 Fact Base</p>
+                <h3>结构化职业事实库</h3>
+              </div>
+              <button
+                className="ghost-button"
+                disabled={factState === "loading" || requestState === "loading"}
+                onClick={handleExtractFacts}
+                type="button"
+              >
+                {factState === "loading" ? "生成中..." : "生成事实库"}
+              </button>
+            </div>
+
+            {factResponse ? (
+              <>
+                <div className="fact-stat-grid">
+                  <div>
+                    <span>事实数</span>
+                    <strong>{factResponse.factBase.totalFacts}</strong>
+                  </div>
+                  <div>
+                    <span>来源类型</span>
+                    <strong>{factResponse.factBase.sourceType}</strong>
+                  </div>
+                  <div>
+                    <span>分组</span>
+                    <strong>{visibleFactGroups.length}</strong>
+                  </div>
+                </div>
+
+                {factResponse.factBase.warnings.length > 0 ? (
+                  <div className="fact-warning-list">
+                    {factResponse.factBase.warnings.map((warning) => (
+                      <p key={warning}>{warning}</p>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="fact-group-list">
+                  {visibleFactGroups.map((group) => (
+                    <article className="fact-group" key={group.category}>
+                      <h4>
+                        {factCategoryLabel[group.category]}
+                        <span>{group.facts.length}</span>
+                      </h4>
+                      <div className="fact-chip-list">
+                        {group.facts.slice(0, 4).map((fact) => (
+                          <div className="fact-chip" key={fact.id}>
+                            <strong>{fact.detail}</strong>
+                            <small>
+                              {fact.confidence}｜证据：{fact.evidence}
+                            </small>
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="fact-empty">
+                先生成事实库，确认系统只基于可追溯证据做后续匹配和改写。
+              </p>
+            )}
+          </section>
+
           <label className="field">
             <span>目标 JD</span>
             <textarea
@@ -522,7 +745,10 @@ export function ResumeWorkbench() {
             <span>补充真实信息</span>
             <textarea
               value={answers}
-              onChange={(event) => setAnswers(event.target.value)}
+              onChange={(event) => {
+                setAnswers(event.target.value);
+                resetFactBase();
+              }}
               placeholder="可选：补充项目成果、指标、职责边界。"
               rows={4}
             />
@@ -540,7 +766,7 @@ export function ResumeWorkbench() {
             清除材料
           </button>
 
-          {requestState === "error" ? (
+          {requestState === "error" || factState === "error" ? (
             <p className="error-message">{errorMessage}</p>
           ) : null}
           {statusMessage ? <p className="status-message">{statusMessage}</p> : null}
