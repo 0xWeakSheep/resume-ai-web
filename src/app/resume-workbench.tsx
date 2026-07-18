@@ -642,7 +642,7 @@ export function ResumeWorkbench() {
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [resumeText, setResumeText] = useState(sampleResume);
-  const [jobDescription, setJobDescription] = useState(sampleJd);
+  const [jobDescription, setJobDescription] = useState("");
   const [jobBatchInput, setJobBatchInput] = useState("");
   const [answers, setAnswers] = useState("");
   const [resumeFile, setResumeFile] = useState<UploadedResumeFile | null>(null);
@@ -700,14 +700,14 @@ export function ResumeWorkbench() {
     jobSources.jobDescriptions.length > 0 || jobSources.jobUrls.length > 0;
   const jdSourceCount =
     jobSources.jobDescriptions.length + jobSources.jobUrls.length;
-  const hasTargetJobDescription = Boolean(jobDescription.trim());
-  const hasJobMaterial = hasJobSources || hasTargetJobDescription;
+  const hasSelectedJobDescription = Boolean(jobDescription.trim());
+  const hasJobMaterial = hasJobSources || hasSelectedJobDescription;
   const readinessPercent = Math.round(
     ([
       hasResumeMaterial,
       hasJobMaterial,
       Boolean(factResponse),
-      Boolean(jobResponse) || hasTargetJobDescription,
+      Boolean(jobResponse) || hasSelectedJobDescription,
     ].filter(Boolean).length /
       4) *
       100,
@@ -740,12 +740,12 @@ export function ResumeWorkbench() {
   const primaryActionTitle = isAnalysisReady
     ? selectedJob
       ? `生成 ${selectedJob.roleTitle} 定制版本`
-      : "生成当前目标 JD 的定制版本"
+      : "生成已分析 JD 的定制版本"
     : "先分析材料与 JD";
   const primaryActionHelper = !hasResumeMaterial
     ? "先上传 PDF / DOCX / TXT，或填写简历文本。"
     : !hasJobMaterial
-      ? "需要一个目标 JD，或在批量 JD 区粘贴岗位来源。"
+      ? "在 JD 输入区粘贴岗位链接或整段 JD 文本。"
       : isAnalysisReady
         ? "材料、事实库和 JD 已就绪，下一步会生成可审核的简历草稿。"
         : "会同时抽取职业事实库、标准化 JD，并自动选择优先岗位。";
@@ -1019,7 +1019,7 @@ export function ResumeWorkbench() {
 
     if (!hasJobMaterial) {
       setJobState("error");
-      setErrorMessage("请先填写目标 JD，或粘贴至少一个 JD 文本 / 链接。");
+      setErrorMessage("请先在 JD 输入区粘贴岗位链接或整段 JD 文本。");
       return false;
     }
 
@@ -1055,7 +1055,7 @@ export function ResumeWorkbench() {
 
     if (!jobDescription.trim()) {
       setRequestState("error");
-      setErrorMessage("请先选择或填写目标 JD。");
+      setErrorMessage("请先在 JD 输入区粘贴链接或文本，并完成分析。");
       return;
     }
 
@@ -1218,7 +1218,7 @@ export function ResumeWorkbench() {
     resetGeneratedResume();
     if (!options.silent) {
       setStatusMessage(
-        `已选择 ${job.roleTitle}${job.company ? `｜${job.company}` : ""} 作为目标 JD。`,
+        `已选择 ${job.roleTitle}${job.company ? `｜${job.company}` : ""} 作为本次定制岗位。`,
       );
     }
     setErrorMessage("");
@@ -1799,19 +1799,6 @@ export function ResumeWorkbench() {
           ) : null}
 
           <label className="field">
-            <span>目标 JD</span>
-            <textarea
-              value={jobDescription}
-              onChange={(event) => {
-                setJobDescription(event.target.value);
-                setSelectedJob(null);
-                resetGeneratedResume();
-              }}
-              rows={10}
-            />
-          </label>
-
-          <label className="field">
             <span>补充真实信息</span>
             <textarea
               value={answers}
@@ -2302,7 +2289,7 @@ export function ResumeWorkbench() {
                 <article>
                   <span>JD 来源</span>
                   <strong>{jdSourceCount || (jobDescription.trim() ? 1 : 0)}</strong>
-                  <small>批量 JD / 目标 JD</small>
+                  <small>JD 链接 / 文本 / 已选岗位</small>
                 </article>
                 <article>
                   <span>事实库</span>
@@ -2319,7 +2306,7 @@ export function ResumeWorkbench() {
                 <div className="preview-chart-row">
                   <span>JD</span>
                   <progress
-                    value={hasJobSources || hasTargetJobDescription ? 100 : 0}
+                    value={hasJobSources || hasSelectedJobDescription ? 100 : 0}
                     max={100}
                   />
                 </div>
