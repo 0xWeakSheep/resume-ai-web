@@ -351,14 +351,14 @@ function buildResumePayload(
   resumeText: string,
   resumeFile: UploadedResumeFile | null,
 ): ResumePayload | null {
+  if (resumeFile) {
+    return { file: resumeFile };
+  }
+
   const trimmedResume = resumeText.trim();
 
   if (trimmedResume) {
     return { text: resumeText };
-  }
-
-  if (resumeFile) {
-    return { file: resumeFile };
   }
 
   return null;
