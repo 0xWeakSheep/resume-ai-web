@@ -698,6 +698,19 @@ export function ResumeWorkbench() {
   const hasResumeMaterial = Boolean(buildResumePayload(resumeText, resumeFile));
   const hasJobSources =
     jobSources.jobDescriptions.length > 0 || jobSources.jobUrls.length > 0;
+  const jdSourceCount =
+    jobSources.jobDescriptions.length + jobSources.jobUrls.length;
+  const hasTargetJobDescription = Boolean(jobDescription.trim());
+  const readinessPercent = Math.round(
+    ([
+      hasResumeMaterial,
+      hasJobSources || hasTargetJobDescription,
+      Boolean(factResponse),
+      Boolean(jobResponse) || hasTargetJobDescription,
+    ].filter(Boolean).length /
+      4) *
+      100,
+  );
   const isPrimaryBusy =
     requestState === "loading" ||
     factState === "loading" ||
@@ -714,6 +727,24 @@ export function ResumeWorkbench() {
             ? "生成高优先级定制简历"
             : "生成定制简历"
           : "分析材料与 JD";
+  const readabilityPercent = result
+    ? Math.max(0, Math.min(100, result.quality.readability.score))
+    : 0;
+  const riskPercent = result
+    ? {
+        low: 22,
+        medium: 58,
+        high: 88,
+      }[result.quality.factConsistency.riskLevel]
+    : 0;
+  const totalSuggestionCount =
+    result?.rewrite.rewrittenExperienceBullets.length ?? 0;
+  const acceptedSuggestionCount = Object.values(suggestionDecisions).filter(
+    (decision) => decision === "accepted",
+  ).length;
+  const acceptedSuggestionPercent = totalSuggestionCount
+    ? Math.round((acceptedSuggestionCount / totalSuggestionCount) * 100)
+    : 0;
 
   function resetFactBase() {
     setFactResponse(null);
@@ -1351,38 +1382,14 @@ export function ResumeWorkbench() {
               <p className="eyebrow">Input</p>
               <h2>材料</h2>
             </div>
+            <button
+              className="ghost-button"
+              onClick={handleFillSampleData}
+              type="button"
+            >
+              填入样例
+            </button>
           </div>
-
-          <ol className="workbench-stepper" aria-label="工作台流程">
-            <li className={hasResumeMaterial ? "complete" : "active"}>
-              <span>1</span>
-              <strong>材料</strong>
-            </li>
-            <li
-              className={
-                isAnalysisReady
-                  ? "complete"
-                  : hasResumeMaterial
-                    ? "active"
-                    : ""
-              }
-            >
-              <span>2</span>
-              <strong>分析</strong>
-            </li>
-            <li
-              className={
-                result ? "complete" : isAnalysisReady ? "active" : ""
-              }
-            >
-              <span>3</span>
-              <strong>生成</strong>
-            </li>
-            <li className={result ? "active" : ""}>
-              <span>4</span>
-              <strong>审核导出</strong>
-            </li>
-          </ol>
 
           <label className="field">
             <span>简历文本</span>
@@ -1744,13 +1751,6 @@ export function ResumeWorkbench() {
             </button>
             <div className="secondary-action-row">
               <button
-                className="text-button"
-                onClick={handleFillSampleData}
-                type="button"
-              >
-                填入样例
-              </button>
-              <button
                 className="text-button danger-link"
                 onClick={handleClearPersonalData}
                 type="button"
@@ -1799,6 +1799,7 @@ export function ResumeWorkbench() {
                 <div>
                   <p className="metric-label">关键词覆盖</p>
                   <strong>{coveragePercent}%</strong>
+                  <progress value={coveragePercent} max={100} />
                   <span>
                     {result.quality.keywordCoverage.matched}/
                     {result.quality.keywordCoverage.total} 关键词
@@ -1807,13 +1808,50 @@ export function ResumeWorkbench() {
                 <div>
                   <p className="metric-label">事实风险</p>
                   <strong>{result.quality.factConsistency.riskLevel}</strong>
+                  <progress value={riskPercent} max={100} />
                   <span>事实一致性</span>
                 </div>
                 <div>
                   <p className="metric-label">可读性</p>
                   <strong>{result.quality.readability.score}</strong>
+                  <progress value={readabilityPercent} max={100} />
                   <span>可读性评分</span>
                 </div>
+              </div>
+
+              <div className="result-chart-grid" aria-label="结果数值概览">
+                <article className="chart-card">
+                  <div>
+                    <span>关键词缺口</span>
+                    <strong>{result.analysis.missingKeywords.length}</strong>
+                  </div>
+                  <p>
+                    已匹配 {result.analysis.matchedKeywords.length} 个，缺口优先进入追问和改写建议。
+                  </p>
+                </article>
+                <article className="chart-card">
+                  <div>
+                    <span>改写纳入率</span>
+                    <strong>{acceptedSuggestionPercent}%</strong>
+                  </div>
+                  <progress value={acceptedSuggestionPercent} max={100} />
+                  <p>
+                    {acceptedSuggestionCount}/{totalSuggestionCount} 条改写已纳入最终稿。
+                  </p>
+                </article>
+                <article className="chart-card">
+                  <div>
+                    <span>硬门槛风险</span>
+                    <strong>
+                      {
+                        result.analysis.requirementMappings.filter(
+                          (mapping) => mapping.status === "missing",
+                        ).length
+                      }
+                    </strong>
+                  </div>
+                  <p>未满足项会保留在质量检查和人工审核清单里。</p>
+                </article>
               </div>
 
               {activePanel === "analysis" ? (
@@ -2184,8 +2222,61 @@ export function ResumeWorkbench() {
             </>
           ) : (
             <div className="empty-state">
-              <p className="eyebrow">Ready</p>
-              <h2>提交简历和 JD 后，这里显示分析、追问、改写草稿和质量检查。</h2>
+              <div className="empty-state-head">
+                <p className="eyebrow">Result preview</p>
+                <h2>结果会在这里生成</h2>
+                <p>
+                  右侧先显示当前材料准备度；生成后切换为匹配分析、质量检查和审核导出。
+                </p>
+              </div>
+
+              <div className="preview-metric-grid">
+                <article>
+                  <span>准备度</span>
+                  <strong>{readinessPercent}%</strong>
+                  <progress value={readinessPercent} max={100} />
+                </article>
+                <article>
+                  <span>简历来源</span>
+                  <strong>{resumeFile ? "文件" : resumeText.trim() ? "文本" : "待补充"}</strong>
+                  <small>{resumeFile?.name ?? "PDF 优先，其次使用简历文本"}</small>
+                </article>
+                <article>
+                  <span>JD 来源</span>
+                  <strong>{jdSourceCount || (jobDescription.trim() ? 1 : 0)}</strong>
+                  <small>批量 JD / 目标 JD</small>
+                </article>
+                <article>
+                  <span>事实库</span>
+                  <strong>{factResponse?.factBase.totalFacts ?? 0}</strong>
+                  <small>{factResponse ? "已生成" : "待分析"}</small>
+                </article>
+              </div>
+
+              <div className="preview-chart-panel">
+                <div className="preview-chart-row">
+                  <span>材料</span>
+                  <progress value={hasResumeMaterial ? 100 : 0} max={100} />
+                </div>
+                <div className="preview-chart-row">
+                  <span>JD</span>
+                  <progress
+                    value={hasJobSources || hasTargetJobDescription ? 100 : 0}
+                    max={100}
+                  />
+                </div>
+                <div className="preview-chart-row">
+                  <span>事实库</span>
+                  <progress value={factResponse ? 100 : 0} max={100} />
+                </div>
+                <div className="preview-chart-row">
+                  <span>版本</span>
+                  <progress
+                    value={versionRecords.length > 0 ? 100 : 0}
+                    max={100}
+                  />
+                </div>
+              </div>
             </div>
           )}
         </section>

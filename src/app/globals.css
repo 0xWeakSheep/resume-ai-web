@@ -460,53 +460,6 @@ textarea {
   line-height: 1.2;
 }
 
-.workbench-stepper {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.45rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.workbench-stepper li {
-  display: grid;
-  gap: 0.45rem;
-  border: 1px solid var(--line);
-  border-radius: 0.45rem;
-  background: var(--surface-raised);
-  color: var(--muted);
-  padding: 0.65rem;
-}
-
-.workbench-stepper li.active {
-  border-color: color-mix(in srgb, var(--accent) 44%, var(--line));
-  background: color-mix(in srgb, var(--accent-soft) 36%, var(--surface-raised));
-  color: var(--accent);
-}
-
-.workbench-stepper li.complete {
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
-  color: var(--foreground);
-}
-
-.workbench-stepper span {
-  display: inline-flex;
-  width: 1.45rem;
-  height: 1.45rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: var(--surface);
-  font-family: var(--font-geist-mono), monospace;
-  font-size: 0.72rem;
-  font-weight: 850;
-}
-
-.workbench-stepper strong {
-  font-size: 0.82rem;
-}
-
 .field {
   display: grid;
   gap: 0.5rem;
@@ -1018,6 +971,92 @@ textarea {
   font-size: 0.85rem;
 }
 
+.score-strip progress,
+.chart-card progress,
+.preview-metric-grid progress,
+.preview-chart-row progress {
+  width: 100%;
+  height: 0.45rem;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.score-strip progress::-webkit-progress-bar,
+.chart-card progress::-webkit-progress-bar,
+.preview-metric-grid progress::-webkit-progress-bar,
+.preview-chart-row progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.score-strip progress::-webkit-progress-value,
+.chart-card progress::-webkit-progress-value,
+.preview-metric-grid progress::-webkit-progress-value,
+.preview-chart-row progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+}
+
+.score-strip progress::-moz-progress-bar,
+.chart-card progress::-moz-progress-bar,
+.preview-metric-grid progress::-moz-progress-bar,
+.preview-chart-row progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+}
+
+.result-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--line);
+  background:
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--accent-soft) 42%, transparent),
+      transparent 42%
+    ),
+    var(--surface);
+  padding: 1rem;
+}
+
+.chart-card {
+  display: grid;
+  gap: 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--surface-raised) 86%, transparent);
+  padding: 0.9rem;
+}
+
+.chart-card div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.chart-card span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.chart-card strong {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.chart-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
 .workflow-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1396,17 +1435,93 @@ textarea {
 
 .empty-state {
   display: grid;
-  align-content: center;
+  align-content: start;
+  gap: 1rem;
   min-height: 48rem;
-  padding: 2rem;
+  padding: 1rem;
 }
 
 .empty-state h2 {
-  max-width: 34rem;
-  margin: 0.5rem 0 0;
-  font-size: 3rem;
-  line-height: 1.08;
+  margin: 0.35rem 0 0;
+  font-size: 1.65rem;
+  line-height: 1.16;
   letter-spacing: 0;
+}
+
+.empty-state-head {
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background:
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--accent-soft) 58%, transparent),
+      transparent 45%
+    ),
+    var(--surface-raised);
+  padding: 1rem;
+}
+
+.empty-state-head p:not(.eyebrow) {
+  max-width: 34rem;
+  margin: 0.7rem 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.preview-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.preview-metric-grid article {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface-raised);
+  padding: 0.9rem;
+}
+
+.preview-metric-grid span,
+.preview-metric-grid small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-metric-grid strong {
+  overflow: hidden;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 1.6rem;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-chart-panel {
+  display: grid;
+  gap: 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface-raised);
+  padding: 1rem;
+}
+
+.preview-chart-row {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.preview-chart-row span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
 }
 
 @media (max-width: 980px) {
@@ -1438,8 +1553,7 @@ textarea {
   }
 
   .section-copy h2,
-  .workflow-panel h2,
-  .empty-state h2 {
+  .workflow-panel h2 {
     font-size: 2.35rem;
   }
 
@@ -1459,12 +1573,13 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .fact-base-header {
-    flex-direction: column;
+  .result-chart-grid,
+  .preview-metric-grid {
+    grid-template-columns: 1fr;
   }
 
-  .workbench-stepper {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .fact-base-header {
+    flex-direction: column;
   }
 
   .fact-stat-grid {
