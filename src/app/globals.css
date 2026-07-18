@@ -460,6 +460,91 @@ textarea {
   line-height: 1.2;
 }
 
+.workbench-action-bar {
+  position: sticky;
+  top: 0.75rem;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
+  border-radius: 0.65rem;
+  background:
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--accent-soft) 58%, transparent),
+      transparent 42%
+    ),
+    color-mix(in srgb, var(--surface-raised) 92%, transparent);
+  box-shadow: 0 1rem 2.5rem color-mix(in srgb, var(--accent) 10%, transparent);
+  padding: 0.9rem;
+  backdrop-filter: blur(18px);
+}
+
+.action-copy {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.action-copy strong {
+  overflow: hidden;
+  font-size: 1rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-copy > span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.action-checklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.action-checklist span {
+  display: inline-flex;
+  min-height: 1.55rem;
+  align-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 55%, transparent);
+  color: var(--muted);
+  padding: 0.2rem 0.55rem;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.action-checklist span.ready {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.action-bar-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.7rem;
+}
+
+.action-bar-buttons .primary-button {
+  min-width: 10rem;
+  padding-inline: 1rem;
+  white-space: nowrap;
+}
+
+.action-bar-buttons .text-button {
+  min-height: 2.75rem;
+  white-space: nowrap;
+}
+
 .field {
   display: grid;
   gap: 0.5rem;
@@ -913,17 +998,6 @@ textarea {
 .danger-link {
   color: var(--danger);
   text-decoration-color: color-mix(in srgb, var(--danger) 34%, transparent);
-}
-
-.form-action-stack {
-  display: grid;
-  gap: 0.65rem;
-}
-
-.secondary-action-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.85rem;
 }
 
 .error-message {
@@ -1580,6 +1654,23 @@ textarea {
 
   .fact-base-header {
     flex-direction: column;
+  }
+
+  .workbench-action-bar {
+    position: static;
+    grid-template-columns: 1fr;
+  }
+
+  .action-copy strong {
+    white-space: normal;
+  }
+
+  .action-bar-buttons {
+    justify-content: stretch;
+  }
+
+  .action-bar-buttons .primary-button {
+    flex: 1;
   }
 
   .fact-stat-grid {

@@ -701,10 +701,11 @@ export function ResumeWorkbench() {
   const jdSourceCount =
     jobSources.jobDescriptions.length + jobSources.jobUrls.length;
   const hasTargetJobDescription = Boolean(jobDescription.trim());
+  const hasJobMaterial = hasJobSources || hasTargetJobDescription;
   const readinessPercent = Math.round(
     ([
       hasResumeMaterial,
-      hasJobSources || hasTargetJobDescription,
+      hasJobMaterial,
       Boolean(factResponse),
       Boolean(jobResponse) || hasTargetJobDescription,
     ].filter(Boolean).length /
@@ -716,17 +717,38 @@ export function ResumeWorkbench() {
     factState === "loading" ||
     jobState === "loading";
   const isAnalysisReady =
-    Boolean(factResponse) && (!hasJobSources || Boolean(jobResponse));
+    Boolean(factResponse) &&
+    hasJobMaterial &&
+    (!hasJobSources || Boolean(jobResponse));
   const primaryActionLabel =
     requestState === "loading"
       ? "生成中..."
       : factState === "loading" || jobState === "loading"
         ? "分析中..."
-        : isAnalysisReady
+        : !hasResumeMaterial
+          ? "先添加简历材料"
+          : !hasJobMaterial
+            ? "先添加 JD"
+            : isAnalysisReady
           ? selectedJob
             ? "生成高优先级定制简历"
             : "生成定制简历"
           : "分析材料与 JD";
+  const canUsePrimaryAction =
+    hasResumeMaterial && hasJobMaterial && !isPrimaryBusy;
+  const primaryActionPhase = isAnalysisReady ? "Generate" : "Analyze";
+  const primaryActionTitle = isAnalysisReady
+    ? selectedJob
+      ? `生成 ${selectedJob.roleTitle} 定制版本`
+      : "生成当前目标 JD 的定制版本"
+    : "先分析材料与 JD";
+  const primaryActionHelper = !hasResumeMaterial
+    ? "先上传 PDF / DOCX / TXT，或填写简历文本。"
+    : !hasJobMaterial
+      ? "需要一个目标 JD，或在批量 JD 区粘贴岗位来源。"
+      : isAnalysisReady
+        ? "材料、事实库和 JD 已就绪，下一步会生成可审核的简历草稿。"
+        : "会同时抽取职业事实库、标准化 JD，并自动选择优先岗位。";
   const readabilityPercent = result
     ? Math.max(0, Math.min(100, result.quality.readability.score))
     : 0;
@@ -992,6 +1014,12 @@ export function ResumeWorkbench() {
     if (!resumePayload) {
       setFactState("error");
       setErrorMessage("请先填写简历文本，或上传 PDF / DOCX / TXT 文件。");
+      return false;
+    }
+
+    if (!hasJobMaterial) {
+      setJobState("error");
+      setErrorMessage("请先填写目标 JD，或粘贴至少一个 JD 文本 / 链接。");
       return false;
     }
 
@@ -1391,6 +1419,45 @@ export function ResumeWorkbench() {
             </button>
           </div>
 
+          <div className="workbench-action-bar" aria-label="工作台主操作">
+            <div className="action-copy">
+              <p className="eyebrow">{primaryActionPhase}</p>
+              <strong>{primaryActionTitle}</strong>
+              <span>{primaryActionHelper}</span>
+              <div className="action-checklist" aria-label="准备状态">
+                <span className={hasResumeMaterial ? "ready" : ""}>简历</span>
+                <span className={hasJobMaterial ? "ready" : ""}>JD</span>
+                <span className={factResponse ? "ready" : ""}>事实库</span>
+                <span className={jobResponse || selectedJob ? "ready" : ""}>
+                  匹配
+                </span>
+              </div>
+            </div>
+            <div className="action-bar-buttons">
+              <button
+                className="primary-button"
+                disabled={!canUsePrimaryAction}
+                type="submit"
+              >
+                {primaryActionLabel}
+              </button>
+              <button
+                className="text-button danger-link"
+                onClick={handleClearPersonalData}
+                type="button"
+              >
+                清除
+              </button>
+            </div>
+          </div>
+
+          {requestState === "error" ||
+          factState === "error" ||
+          jobState === "error" ? (
+            <p className="error-message">{errorMessage}</p>
+          ) : null}
+          {statusMessage ? <p className="status-message">{statusMessage}</p> : null}
+
           <label className="field">
             <span>简历文本</span>
             <textarea
@@ -1745,27 +1812,6 @@ export function ResumeWorkbench() {
             />
           </label>
 
-          <div className="form-action-stack">
-            <button className="primary-button" disabled={isPrimaryBusy}>
-              {primaryActionLabel}
-            </button>
-            <div className="secondary-action-row">
-              <button
-                className="text-button danger-link"
-                onClick={handleClearPersonalData}
-                type="button"
-              >
-                清除材料
-              </button>
-            </div>
-          </div>
-
-          {requestState === "error" ||
-          factState === "error" ||
-          jobState === "error" ? (
-            <p className="error-message">{errorMessage}</p>
-          ) : null}
-          {statusMessage ? <p className="status-message">{statusMessage}</p> : null}
         </form>
 
         <section className="result-panel">
