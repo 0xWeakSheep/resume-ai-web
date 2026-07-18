@@ -580,6 +580,35 @@ function createVersionFingerprint(
   return stableHash(`${roleTitle}\n${jobDescription}\n${draftMarkdown}`);
 }
 
+function findBestReadyJob(payload: JobStandardizeResponse) {
+  let bestJob: StandardizedJob | null = null;
+
+  for (const job of payload.jobs) {
+    if (job.status !== "ready" || job.filterStatus === "blocked") {
+      continue;
+    }
+
+    if (!bestJob) {
+      bestJob = job;
+      continue;
+    }
+
+    const currentRank = job.priorityRank ?? Number.POSITIVE_INFINITY;
+    const bestRank = bestJob.priorityRank ?? Number.POSITIVE_INFINITY;
+    const currentScore = job.match?.score ?? 0;
+    const bestScore = bestJob.match?.score ?? 0;
+
+    if (
+      currentRank < bestRank ||
+      (currentRank === bestRank && currentScore > bestScore)
+    ) {
+      bestJob = job;
+    }
+  }
+
+  return bestJob;
+}
+
 function readStoredVersionRecords(): ResumeVersionRecord[] {
   if (typeof window === "undefined") {
     return [];
@@ -663,6 +692,28 @@ export function ResumeWorkbench() {
         : [],
     [factResponse],
   );
+  const jobSources = useMemo(() => parseJobSources(jobBatchInput), [
+    jobBatchInput,
+  ]);
+  const hasResumeMaterial = Boolean(buildResumePayload(resumeText, resumeFile));
+  const hasJobSources =
+    jobSources.jobDescriptions.length > 0 || jobSources.jobUrls.length > 0;
+  const isPrimaryBusy =
+    requestState === "loading" ||
+    factState === "loading" ||
+    jobState === "loading";
+  const isAnalysisReady =
+    Boolean(factResponse) && (!hasJobSources || Boolean(jobResponse));
+  const primaryActionLabel =
+    requestState === "loading"
+      ? "生成中..."
+      : factState === "loading" || jobState === "loading"
+        ? "分析中..."
+        : isAnalysisReady
+          ? selectedJob
+            ? "生成高优先级定制简历"
+            : "生成定制简历"
+          : "分析材料与 JD";
 
   function resetFactBase() {
     setFactResponse(null);
@@ -783,14 +834,14 @@ export function ResumeWorkbench() {
     if (!apiBaseUrl) {
       setFactState("error");
       setErrorMessage("缺少 NEXT_PUBLIC_API_BASE_URL，前端无法连接后端。");
-      return;
+      return false;
     }
 
     const resumePayload = buildResumePayload(resumeText, resumeFile);
     if (!resumePayload) {
       setFactState("error");
       setErrorMessage("请先填写简历文本，或上传 PDF / DOCX / TXT 文件。");
-      return;
+      return false;
     }
 
     setFactState("loading");
@@ -825,11 +876,13 @@ export function ResumeWorkbench() {
       setStatusMessage(
         `已生成 ${payload.factBase.totalFacts} 条结构化职业事实。`,
       );
+      return true;
     } catch (error) {
       setFactState("error");
       setErrorMessage(
         error instanceof Error ? error.message : "事实库生成失败",
       );
+      return false;
     }
   }
 
@@ -837,7 +890,7 @@ export function ResumeWorkbench() {
     if (!apiBaseUrl) {
       setJobState("error");
       setErrorMessage("缺少 NEXT_PUBLIC_API_BASE_URL，前端无法连接后端。");
-      return;
+      return false;
     }
 
     const { jobDescriptions, jobUrls } = parseJobSources(jobBatchInput);
@@ -845,7 +898,7 @@ export function ResumeWorkbench() {
     if (jobDescriptions.length === 0 && jobUrls.length === 0) {
       setJobState("error");
       setErrorMessage("请粘贴至少一个 JD 文本，或输入至少一个 JD 链接。");
-      return;
+      return false;
     }
 
     setJobState("loading");
@@ -881,22 +934,53 @@ export function ResumeWorkbench() {
       }
 
       const payload = (await response.json()) as JobStandardizeResponse;
+      const bestJob = findBestReadyJob(payload);
+
       setJobResponse(payload);
       setJobState("success");
+      if (bestJob) {
+        handleUseStandardizedJob(bestJob, { silent: true });
+      }
       setStatusMessage(
-        `已处理 ${payload.summary.total} 个 JD 来源，可用 ${payload.summary.ready} 个。`,
+        `已处理 ${payload.summary.total} 个 JD 来源，可用 ${payload.summary.ready} 个${
+          bestJob ? `，已自动选择 ${bestJob.roleTitle}` : ""
+        }。`,
       );
+      return true;
     } catch (error) {
       setJobState("error");
       setErrorMessage(
         error instanceof Error ? error.message : "JD 标准化失败",
       );
+      return false;
     }
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleAnalyzeInputs() {
+    const resumePayload = buildResumePayload(resumeText, resumeFile);
+    if (!resumePayload) {
+      setFactState("error");
+      setErrorMessage("请先填写简历文本，或上传 PDF / DOCX / TXT 文件。");
+      return false;
+    }
 
+    const [factsReady, jobsReady] = await Promise.all([
+      handleExtractFacts(),
+      hasJobSources ? handleStandardizeJobs() : Promise.resolve(true),
+    ]);
+
+    if (factsReady && jobsReady) {
+      setStatusMessage(
+        hasJobSources
+          ? "材料和 JD 已完成分析，可以生成定制简历。"
+          : "简历事实库已完成分析，可以生成定制简历。",
+      );
+    }
+
+    return factsReady && jobsReady;
+  }
+
+  async function handleGenerateResume() {
     if (!apiBaseUrl) {
       setRequestState("error");
       setErrorMessage("缺少 NEXT_PUBLIC_API_BASE_URL，前端无法连接后端。");
@@ -907,6 +991,12 @@ export function ResumeWorkbench() {
     if (!resumePayload) {
       setRequestState("error");
       setErrorMessage("请先填写简历文本，或上传 PDF / DOCX / TXT 文件。");
+      return;
+    }
+
+    if (!jobDescription.trim()) {
+      setRequestState("error");
+      setErrorMessage("请先选择或填写目标 JD。");
       return;
     }
 
@@ -959,6 +1049,47 @@ export function ResumeWorkbench() {
     }
   }
 
+  async function handlePrimaryWorkflowAction() {
+    if (!isAnalysisReady) {
+      await handleAnalyzeInputs();
+      return;
+    }
+
+    await handleGenerateResume();
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await handlePrimaryWorkflowAction();
+  }
+
+  function handleFillSampleData() {
+    setResumeText(sampleResume);
+    setJobDescription(sampleJd);
+    setJobBatchInput(sampleJobBatchInput);
+    setAnswers("");
+    setResumeFile(null);
+    setFactResponse(null);
+    setFactState("idle");
+    setJobResponse(null);
+    setJobState("idle");
+    setSelectedJob(null);
+    setResult(null);
+    setEditableDraft("");
+    setSuggestionDecisions({});
+    setSuggestionEdits({});
+    setCurrentVersionId(null);
+    setConfirmedAt(null);
+    setActivePanel("analysis");
+    setStatusMessage("");
+    setErrorMessage("");
+    setRequestState("idle");
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
   function handleClearPersonalData() {
     setResumeText("");
     setJobDescription("");
@@ -1002,7 +1133,10 @@ export function ResumeWorkbench() {
     setStatusMessage("追问已加入补充信息区，补充事实后可重新生成。");
   }
 
-  function handleUseStandardizedJob(job: StandardizedJob) {
+  function handleUseStandardizedJob(
+    job: StandardizedJob,
+    options: { silent?: boolean } = {},
+  ) {
     const nextJobDescription = job.normalizedText || job.rawText;
     if (
       !nextJobDescription.trim() ||
@@ -1023,9 +1157,11 @@ export function ResumeWorkbench() {
       filterStatus: job.filterStatus,
     });
     resetGeneratedResume();
-    setStatusMessage(
-      `已选择 ${job.roleTitle}${job.company ? `｜${job.company}` : ""} 作为目标 JD。`,
-    );
+    if (!options.silent) {
+      setStatusMessage(
+        `已选择 ${job.roleTitle}${job.company ? `｜${job.company}` : ""} 作为目标 JD。`,
+      );
+    }
     setErrorMessage("");
   }
 
@@ -1215,38 +1351,38 @@ export function ResumeWorkbench() {
               <p className="eyebrow">Input</p>
               <h2>材料</h2>
             </div>
-            <button
-              className="ghost-button"
-              type="button"
-              onClick={() => {
-                setResumeText(sampleResume);
-                setJobDescription(sampleJd);
-                setJobBatchInput(sampleJobBatchInput);
-                setAnswers("");
-                setResumeFile(null);
-                setFactResponse(null);
-                setFactState("idle");
-                setJobResponse(null);
-                setJobState("idle");
-                setSelectedJob(null);
-                setResult(null);
-                setEditableDraft("");
-                setSuggestionDecisions({});
-                setSuggestionEdits({});
-                setCurrentVersionId(null);
-                setConfirmedAt(null);
-                setActivePanel("analysis");
-                setStatusMessage("");
-                setErrorMessage("");
-
-                if (fileInputRef.current) {
-                  fileInputRef.current.value = "";
-                }
-              }}
-            >
-              填入样例
-            </button>
           </div>
+
+          <ol className="workbench-stepper" aria-label="工作台流程">
+            <li className={hasResumeMaterial ? "complete" : "active"}>
+              <span>1</span>
+              <strong>材料</strong>
+            </li>
+            <li
+              className={
+                isAnalysisReady
+                  ? "complete"
+                  : hasResumeMaterial
+                    ? "active"
+                    : ""
+              }
+            >
+              <span>2</span>
+              <strong>分析</strong>
+            </li>
+            <li
+              className={
+                result ? "complete" : isAnalysisReady ? "active" : ""
+              }
+            >
+              <span>3</span>
+              <strong>生成</strong>
+            </li>
+            <li className={result ? "active" : ""}>
+              <span>4</span>
+              <strong>审核导出</strong>
+            </li>
+          </ol>
 
           <label className="field">
             <span>简历文本</span>
@@ -1276,15 +1412,10 @@ export function ResumeWorkbench() {
               <div>
                 <p className="eyebrow">P0 Fact Base</p>
                 <h3>结构化职业事实库</h3>
+                <p className="card-subcopy">
+                  由主流程按钮自动生成，用来约束后续改写只引用可追溯事实。
+                </p>
               </div>
-              <button
-                className="ghost-button"
-                disabled={factState === "loading" || requestState === "loading"}
-                onClick={handleExtractFacts}
-                type="button"
-              >
-                {factState === "loading" ? "生成中..." : "生成事实库"}
-              </button>
             </div>
 
             {factResponse ? (
@@ -1335,7 +1466,7 @@ export function ResumeWorkbench() {
               </>
             ) : (
               <p className="fact-empty">
-                先生成事实库，确认系统只基于可追溯证据做后续匹配和改写。
+                下一步点击“分析材料与 JD”，系统会先抽取简历事实，再进入匹配与改写。
               </p>
             )}
           </section>
@@ -1345,15 +1476,10 @@ export function ResumeWorkbench() {
               <div>
                 <p className="eyebrow">P0 JD Queue</p>
                 <h3>JD 输入与标准化</h3>
+                <p className="card-subcopy">
+                  支持多个 JD 文本或链接；分析后会自动选择最适合优先处理的岗位。
+                </p>
               </div>
-              <button
-                className="ghost-button"
-                disabled={jobState === "loading" || requestState === "loading"}
-                onClick={handleStandardizeJobs}
-                type="button"
-              >
-                {jobState === "loading" ? "处理中..." : "标准化 JD"}
-              </button>
             </div>
 
             <label className="field compact-field">
@@ -1400,8 +1526,16 @@ export function ResumeWorkbench() {
                 </div>
 
                 <div className="job-card-list">
-                  {jobResponse.jobs.map((job) => (
-                    <article className="job-card" key={job.id}>
+                  {jobResponse.jobs.map((job) => {
+                    const isSelectedJob = selectedJob?.id === job.id;
+                    const canSelectJob =
+                      job.status === "ready" && job.filterStatus !== "blocked";
+
+                    return (
+                    <article
+                      className={`job-card${isSelectedJob ? " selected" : ""}`}
+                      key={job.id}
+                    >
                       <div className="job-card-head">
                         <div>
                           <div className="job-pill-row">
@@ -1430,17 +1564,17 @@ export function ResumeWorkbench() {
                             {job.duplicateOf ? `｜重复于 ${job.duplicateOf}` : ""}
                           </small>
                         </div>
-                        <button
-                          className="ghost-button"
-                          disabled={
-                            job.status !== "ready" ||
-                            job.filterStatus === "blocked"
-                          }
-                          onClick={() => handleUseStandardizedJob(job)}
-                          type="button"
-                        >
-                          设为目标 JD
-                        </button>
+                        {isSelectedJob ? (
+                          <span className="selected-chip">当前目标</span>
+                        ) : canSelectJob ? (
+                          <button
+                            className="text-button"
+                            onClick={() => handleUseStandardizedJob(job)}
+                            type="button"
+                          >
+                            选择
+                          </button>
+                        ) : null}
                       </div>
 
                       {job.warnings.length > 0 ? (
@@ -1541,7 +1675,8 @@ export function ResumeWorkbench() {
                         </>
                       ) : null}
                     </article>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             ) : (
@@ -1603,21 +1738,27 @@ export function ResumeWorkbench() {
             />
           </label>
 
-          <button className="primary-button" disabled={requestState === "loading"}>
-            {requestState === "loading"
-              ? "分析中..."
-              : selectedJob
-                ? "生成高优先级定制版本"
-                : "生成定制版本"}
-          </button>
-
-          <button
-            className="danger-button"
-            onClick={handleClearPersonalData}
-            type="button"
-          >
-            清除材料
-          </button>
+          <div className="form-action-stack">
+            <button className="primary-button" disabled={isPrimaryBusy}>
+              {primaryActionLabel}
+            </button>
+            <div className="secondary-action-row">
+              <button
+                className="text-button"
+                onClick={handleFillSampleData}
+                type="button"
+              >
+                填入样例
+              </button>
+              <button
+                className="text-button danger-link"
+                onClick={handleClearPersonalData}
+                type="button"
+              >
+                清除材料
+              </button>
+            </div>
+          </div>
 
           {requestState === "error" ||
           factState === "error" ||
@@ -1887,34 +2028,25 @@ export function ResumeWorkbench() {
                                   </small>
                                 ) : null}
                                 <div className="suggestion-actions">
-                                  <span>{rewriteDecisionLabel[decision]}</span>
+                                  <span
+                                    className={`decision-state ${decision}`}
+                                  >
+                                    {rewriteDecisionLabel[decision]}
+                                  </span>
                                   <button
-                                    className="ghost-button"
-                                    disabled={decision === "accepted"}
+                                    className="text-button"
                                     onClick={() =>
                                       handleSuggestionDecision(
                                         suggestion,
                                         index,
-                                        "accepted",
+                                        decision === "accepted"
+                                          ? "rejected"
+                                          : "accepted",
                                       )
                                     }
                                     type="button"
                                   >
-                                    接受此条
-                                  </button>
-                                  <button
-                                    className="ghost-button"
-                                    disabled={decision === "rejected"}
-                                    onClick={() =>
-                                      handleSuggestionDecision(
-                                        suggestion,
-                                        index,
-                                        "rejected",
-                                      )
-                                    }
-                                    type="button"
-                                  >
-                                    拒绝此条
+                                    {decision === "accepted" ? "排除" : "纳入"}
                                   </button>
                                 </div>
                               </div>
@@ -1947,18 +2079,18 @@ export function ResumeWorkbench() {
                         onClick={handleConfirmDraft}
                         type="button"
                       >
-                        确认版本
+                        确认并保存版本
                       </button>
                       <button
-                        className="ghost-button"
+                        className="text-button"
                         disabled={!draftChanged}
                         onClick={handleResetDraft}
                         type="button"
                       >
-                        恢复草稿
+                        恢复 AI 草稿
                       </button>
                       <button
-                        className="ghost-button"
+                        className="text-button"
                         disabled={!editableDraft.trim()}
                         onClick={handleCopyDraft}
                         type="button"
@@ -1996,27 +2128,16 @@ export function ResumeWorkbench() {
                     <p className="version-privacy-note">
                       版本记录只保存在当前浏览器本地，用于 MVP 阶段回看岗位、JD、最终稿和导出关系。
                     </p>
-                    <div className="draft-actions">
-                      <button
-                        className="ghost-button"
-                        disabled={!result || !editableDraft.trim()}
-                        onClick={() => {
-                          const record = saveCurrentVersion();
-                          setStatusMessage(
-                            record
-                              ? `已保存当前版本 ${record.id.slice(0, 8)}。`
-                              : "当前没有可保存版本。",
-                          );
-                        }}
-                        type="button"
-                      >
-                        保存当前版本
-                      </button>
+                    <div className="version-summary-row">
                       {currentVersionId ? (
                         <span className="confirm-state">
                           当前版本：{currentVersionId.slice(0, 8)}
                         </span>
-                      ) : null}
+                      ) : (
+                        <span className="confirm-state">
+                          确认最终稿或导出后会自动保存版本。
+                        </span>
+                      )}
                     </div>
                     {versionRecords.length > 0 ? (
                       <div className="version-list">

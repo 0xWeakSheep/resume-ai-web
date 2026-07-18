@@ -370,18 +370,21 @@ textarea {
   .home-secondary,
   .primary-button,
   .ghost-button,
-  .danger-button {
+  .danger-button,
+  .text-button {
     transition:
       transform 140ms ease,
       border-color 140ms ease,
-      background-color 140ms ease;
+      background-color 140ms ease,
+      color 140ms ease;
   }
 
   .home-primary:active,
   .home-secondary:active,
   .primary-button:active,
   .ghost-button:active,
-  .danger-button:active {
+  .danger-button:active,
+  .text-button:active {
     transform: translateY(1px);
   }
 }
@@ -455,6 +458,53 @@ textarea {
   margin: 0.15rem 0 0;
   font-size: 1.35rem;
   line-height: 1.2;
+}
+
+.workbench-stepper {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workbench-stepper li {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  background: var(--surface-raised);
+  color: var(--muted);
+  padding: 0.65rem;
+}
+
+.workbench-stepper li.active {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 36%, var(--surface-raised));
+  color: var(--accent);
+}
+
+.workbench-stepper li.complete {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+  color: var(--foreground);
+}
+
+.workbench-stepper span {
+  display: inline-flex;
+  width: 1.45rem;
+  height: 1.45rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--surface);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.workbench-stepper strong {
+  font-size: 0.82rem;
 }
 
 .field {
@@ -559,6 +609,14 @@ textarea {
 .fact-base-header h3 {
   margin: 0.15rem 0 0;
   font-size: 1.05rem;
+}
+
+.card-subcopy {
+  max-width: 31rem;
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
 }
 
 .fact-stat-grid {
@@ -721,6 +779,11 @@ textarea {
   contain-intrinsic-size: 0 18rem;
 }
 
+.job-card.selected {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 22%, var(--surface-raised));
+}
+
 .job-card-head {
   display: flex;
   align-items: flex-start;
@@ -757,6 +820,19 @@ textarea {
   font-family: var(--font-geist-mono), monospace;
   font-size: 0.78rem;
   font-weight: 800;
+}
+
+.selected-chip {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 850;
+  white-space: nowrap;
 }
 
 .job-warning-list {
@@ -857,6 +933,44 @@ textarea {
 
 .danger-button:hover {
   border-color: var(--danger);
+}
+
+.text-button {
+  min-height: 2rem;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  padding: 0;
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  text-underline-offset: 0.22rem;
+}
+
+.text-button:hover {
+  color: var(--accent-hover);
+  text-decoration-color: currentColor;
+}
+
+.text-button:disabled {
+  color: var(--muted);
+  text-decoration-color: transparent;
+}
+
+.danger-link {
+  color: var(--danger);
+  text-decoration-color: color-mix(in srgb, var(--danger) 34%, transparent);
+}
+
+.form-action-stack {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.secondary-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
 }
 
 .error-message {
@@ -1086,6 +1200,14 @@ textarea {
   font-weight: 750;
 }
 
+.decision-state.accepted {
+  color: var(--accent);
+}
+
+.decision-state.rejected {
+  color: var(--danger);
+}
+
 .source-fact-card {
   content-visibility: auto;
   contain-intrinsic-size: 0 7rem;
@@ -1229,6 +1351,12 @@ textarea {
   line-height: 1.6;
 }
 
+.version-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
 .version-list {
   display: grid;
   gap: 0.75rem;
@@ -1333,6 +1461,10 @@ textarea {
 
   .fact-base-header {
     flex-direction: column;
+  }
+
+  .workbench-stepper {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .fact-stat-grid {
