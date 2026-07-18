@@ -12,6 +12,7 @@ import {
 type RequestState = "idle" | "loading" | "success" | "error";
 type ExportState = "idle" | "docx" | "pdf";
 type ActivePanel = "analysis" | "review" | "quality";
+type JobSourceStatus = "ready" | "failed" | "duplicate";
 type CareerFactCategory =
   | "profile"
   | "experience"
@@ -47,6 +48,44 @@ interface FactResponse {
     facts: CareerFact[];
     grouped: Record<CareerFactCategory, CareerFact[]>;
     warnings: string[];
+  };
+}
+
+interface StandardizedRequirement {
+  id: string;
+  text: string;
+  type: string;
+  keywords: string[];
+}
+
+interface HardRequirement {
+  type: string;
+  text: string;
+}
+
+interface StandardizedJob {
+  id: string;
+  sourceType: "text" | "url";
+  source: string;
+  status: JobSourceStatus;
+  roleTitle: string;
+  company?: string;
+  rawText: string;
+  normalizedText: string;
+  requirements: StandardizedRequirement[];
+  keywords: string[];
+  criticalKeywords: string[];
+  hardRequirements: HardRequirement[];
+  warnings: string[];
+}
+
+interface JobStandardizeResponse {
+  jobs: StandardizedJob[];
+  summary: {
+    total: number;
+    ready: number;
+    failed: number;
+    duplicate: number;
   };
 }
 
@@ -143,6 +182,13 @@ const sampleJd = `岗位：AI 产品经理
 3. 具备数据分析能力，能够设计 A/B测试 并评估业务效果。
 4. 有 SaaS 商业化经验优先。`;
 
+const sampleJobBatchInput = `${sampleJd}
+
+公司：某 AI SaaS 公司
+岗位：增长产品经理
+1. 本科及以上学历，3 年以上增长或 AI 产品经验。
+2. 熟悉数据分析、A/B测试 和跨团队项目推进。`;
+
 const statusLabel: Record<RequirementMapping["status"], string> = {
   matched: "已匹配",
   partial: "部分匹配",
@@ -153,6 +199,18 @@ const statusClassName: Record<RequirementMapping["status"], string> = {
   matched: "status-pill matched",
   partial: "status-pill partial",
   missing: "status-pill missing",
+};
+
+const jobStatusLabel: Record<JobSourceStatus, string> = {
+  ready: "可用",
+  failed: "失败",
+  duplicate: "重复",
+};
+
+const jobStatusClassName: Record<JobSourceStatus, string> = {
+  ready: "status-pill matched",
+  failed: "status-pill missing",
+  duplicate: "status-pill partial",
 };
 
 const factCategoryOrder: CareerFactCategory[] = [
@@ -192,6 +250,40 @@ function buildResumePayload(
   }
 
   return null;
+}
+
+function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function parseJobSources(input: string) {
+  const jobDescriptions: string[] = [];
+  const jobUrls: string[] = [];
+
+  input
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .forEach((block) => {
+      const lines = block
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+      if (lines.length > 0 && lines.every(isHttpUrl)) {
+        jobUrls.push(...lines);
+        return;
+      }
+
+      jobDescriptions.push(block);
+    });
+
+  return { jobDescriptions, jobUrls };
 }
 
 function readFileAsBase64(file: File): Promise<string> {
@@ -294,16 +386,21 @@ export function ResumeWorkbench() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [resumeText, setResumeText] = useState(sampleResume);
   const [jobDescription, setJobDescription] = useState(sampleJd);
+  const [jobBatchInput, setJobBatchInput] = useState(sampleJobBatchInput);
   const [answers, setAnswers] = useState("");
   const [resumeFile, setResumeFile] = useState<UploadedResumeFile | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [factState, setFactState] = useState<RequestState>("idle");
+  const [jobState, setJobState] = useState<RequestState>("idle");
   const [exportState, setExportState] = useState<ExportState>("idle");
   const [activePanel, setActivePanel] = useState<ActivePanel>("analysis");
   const [errorMessage, setErrorMessage] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [result, setResult] = useState<CustomizeResponse | null>(null);
   const [factResponse, setFactResponse] = useState<FactResponse | null>(null);
+  const [jobResponse, setJobResponse] = useState<JobStandardizeResponse | null>(
+    null,
+  );
   const [editableDraft, setEditableDraft] = useState("");
   const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
 
@@ -329,6 +426,14 @@ export function ResumeWorkbench() {
   function resetFactBase() {
     setFactResponse(null);
     setFactState("idle");
+  }
+
+  function resetGeneratedResume() {
+    setResult(null);
+    setEditableDraft("");
+    setConfirmedAt(null);
+    setActivePanel("analysis");
+    setRequestState("idle");
   }
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -402,6 +507,60 @@ export function ResumeWorkbench() {
     }
   }
 
+  async function handleStandardizeJobs() {
+    if (!apiBaseUrl) {
+      setJobState("error");
+      setErrorMessage("缺少 NEXT_PUBLIC_API_BASE_URL，前端无法连接后端。");
+      return;
+    }
+
+    const { jobDescriptions, jobUrls } = parseJobSources(jobBatchInput);
+    if (jobDescriptions.length === 0 && jobUrls.length === 0) {
+      setJobState("error");
+      setErrorMessage("请粘贴至少一个 JD 文本，或输入至少一个 JD 链接。");
+      return;
+    }
+
+    setJobState("loading");
+    setStatusMessage("");
+    setErrorMessage("");
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/resume/jobs/standardize`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          jobDescriptions,
+          jobUrls,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorBody = (await response.json().catch(() => null)) as {
+          message?: string | string[];
+        } | null;
+        const message = Array.isArray(errorBody?.message)
+          ? errorBody.message.join("；")
+          : errorBody?.message;
+        throw new Error(message || `JD 标准化失败：${response.status}`);
+      }
+
+      const payload = (await response.json()) as JobStandardizeResponse;
+      setJobResponse(payload);
+      setJobState("success");
+      setStatusMessage(
+        `已处理 ${payload.summary.total} 个 JD 来源，可用 ${payload.summary.ready} 个。`,
+      );
+    } catch (error) {
+      setJobState("error");
+      setErrorMessage(
+        error instanceof Error ? error.message : "JD 标准化失败",
+      );
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -460,10 +619,13 @@ export function ResumeWorkbench() {
   function handleClearPersonalData() {
     setResumeText("");
     setJobDescription("");
+    setJobBatchInput("");
     setAnswers("");
     setResumeFile(null);
     setFactResponse(null);
     setFactState("idle");
+    setJobResponse(null);
+    setJobState("idle");
     setResult(null);
     setEditableDraft("");
     setConfirmedAt(null);
@@ -490,6 +652,20 @@ export function ResumeWorkbench() {
     });
     resetFactBase();
     setStatusMessage("追问已加入补充信息区，补充事实后可重新生成。");
+  }
+
+  function handleUseStandardizedJob(job: StandardizedJob) {
+    const nextJobDescription = job.normalizedText || job.rawText;
+    if (!nextJobDescription.trim() || job.status !== "ready") {
+      return;
+    }
+
+    setJobDescription(nextJobDescription);
+    resetGeneratedResume();
+    setStatusMessage(
+      `已选择 ${job.roleTitle}${job.company ? `｜${job.company}` : ""} 作为目标 JD。`,
+    );
+    setErrorMessage("");
   }
 
   function handleResetDraft() {
@@ -620,10 +796,13 @@ export function ResumeWorkbench() {
               onClick={() => {
                 setResumeText(sampleResume);
                 setJobDescription(sampleJd);
+                setJobBatchInput(sampleJobBatchInput);
                 setAnswers("");
                 setResumeFile(null);
                 setFactResponse(null);
                 setFactState("idle");
+                setJobResponse(null);
+                setJobState("idle");
                 setResult(null);
                 setEditableDraft("");
                 setConfirmedAt(null);
@@ -732,11 +911,146 @@ export function ResumeWorkbench() {
             )}
           </section>
 
+          <section className="job-source-card" aria-live="polite">
+            <div className="fact-base-header">
+              <div>
+                <p className="eyebrow">P0 JD Queue</p>
+                <h3>JD 输入与标准化</h3>
+              </div>
+              <button
+                className="ghost-button"
+                disabled={jobState === "loading" || requestState === "loading"}
+                onClick={handleStandardizeJobs}
+                type="button"
+              >
+                {jobState === "loading" ? "处理中..." : "标准化 JD"}
+              </button>
+            </div>
+
+            <label className="field compact-field">
+              <span>批量 JD 文本 / 链接</span>
+              <textarea
+                onChange={(event) => {
+                  setJobBatchInput(event.target.value);
+                  setJobResponse(null);
+                  setJobState("idle");
+                }}
+                placeholder="多个 JD 文本用空行分隔；多个链接可以逐行粘贴。"
+                rows={8}
+                value={jobBatchInput}
+              />
+            </label>
+
+            {jobResponse ? (
+              <>
+                <div className="job-stat-grid">
+                  <div>
+                    <span>总来源</span>
+                    <strong>{jobResponse.summary.total}</strong>
+                  </div>
+                  <div>
+                    <span>可用</span>
+                    <strong>{jobResponse.summary.ready}</strong>
+                  </div>
+                  <div>
+                    <span>失败/重复</span>
+                    <strong>
+                      {jobResponse.summary.failed}/
+                      {jobResponse.summary.duplicate}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="job-card-list">
+                  {jobResponse.jobs.map((job) => (
+                    <article className="job-card" key={job.id}>
+                      <div className="job-card-head">
+                        <div>
+                          <span className={jobStatusClassName[job.status]}>
+                            {jobStatusLabel[job.status]}
+                          </span>
+                          <h4>{job.roleTitle}</h4>
+                          <small>
+                            {job.company ? `${job.company}｜` : ""}
+                            {job.sourceType === "url" ? "链接来源" : "文本来源"}
+                          </small>
+                        </div>
+                        <button
+                          className="ghost-button"
+                          disabled={job.status !== "ready"}
+                          onClick={() => handleUseStandardizedJob(job)}
+                          type="button"
+                        >
+                          设为目标 JD
+                        </button>
+                      </div>
+
+                      {job.warnings.length > 0 ? (
+                        <div className="job-warning-list">
+                          {job.warnings.map((warning) => (
+                            <p key={warning}>{warning}</p>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {job.status === "ready" ? (
+                        <>
+                          <div className="job-meta-grid">
+                            <div>
+                              <span>要求</span>
+                              <strong>{job.requirements.length}</strong>
+                            </div>
+                            <div>
+                              <span>硬门槛</span>
+                              <strong>{job.hardRequirements.length}</strong>
+                            </div>
+                            <div>
+                              <span>关键词</span>
+                              <strong>{job.keywords.length}</strong>
+                            </div>
+                          </div>
+
+                          {job.hardRequirements.length > 0 ? (
+                            <div className="hard-requirement-list">
+                              {job.hardRequirements.slice(0, 3).map((item) => (
+                                <span key={`${job.id}-${item.type}-${item.text}`}>
+                                  {item.type}：{item.text}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          <div className="keyword-row">
+                            {job.criticalKeywords.slice(0, 8).map((keyword) => (
+                              <span
+                                className="keyword matched-keyword"
+                                key={`${job.id}-${keyword}`}
+                              >
+                                {keyword}
+                              </span>
+                            ))}
+                          </div>
+                        </>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="fact-empty">
+                这里用于把多个 JD 文本或链接先转成统一结构，再选择一个作为定制简历目标。
+              </p>
+            )}
+          </section>
+
           <label className="field">
             <span>目标 JD</span>
             <textarea
               value={jobDescription}
-              onChange={(event) => setJobDescription(event.target.value)}
+              onChange={(event) => {
+                setJobDescription(event.target.value);
+                resetGeneratedResume();
+              }}
               rows={10}
             />
           </label>
@@ -766,7 +1080,9 @@ export function ResumeWorkbench() {
             清除材料
           </button>
 
-          {requestState === "error" || factState === "error" ? (
+          {requestState === "error" ||
+          factState === "error" ||
+          jobState === "error" ? (
             <p className="error-message">{errorMessage}</p>
           ) : null}
           {statusMessage ? <p className="status-message">{statusMessage}</p> : null}

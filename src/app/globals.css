@@ -486,6 +486,10 @@ textarea {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+.compact-field textarea {
+  min-height: 8rem;
+}
+
 .file-field {
   display: grid;
   gap: 0.45rem;
@@ -510,6 +514,15 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--accent-soft) 24%, var(--surface-raised));
+  padding: 0.9rem;
+}
+
+.job-source-card {
+  display: grid;
+  gap: 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, var(--accent));
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--info-soft) 26%, var(--surface-raised));
   padding: 0.9rem;
 }
 
@@ -624,6 +637,109 @@ textarea {
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.job-stat-grid,
+.job-meta-grid {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  background: var(--surface);
+}
+
+.job-stat-grid,
+.job-meta-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.job-stat-grid > div,
+.job-meta-grid > div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.65rem;
+}
+
+.job-stat-grid > div + div,
+.job-meta-grid > div + div {
+  border-left: 1px solid var(--line);
+}
+
+.job-stat-grid span,
+.job-meta-grid span,
+.job-card small {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.job-stat-grid strong,
+.job-meta-grid strong {
+  font-size: 1.15rem;
+  line-height: 1.1;
+}
+
+.job-card-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.job-card {
+  display: grid;
+  gap: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 0.5rem;
+  background: var(--surface-raised);
+  padding: 0.75rem;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 18rem;
+}
+
+.job-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.job-card-head > div {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.job-card h4 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.job-warning-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.job-warning-list p {
+  margin: 0;
+  border-radius: 0.45rem;
+  background: var(--warning-soft);
+  color: var(--warning);
+  padding: 0.55rem;
+  line-height: 1.45;
+}
+
+.hard-requirement-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.hard-requirement-list span {
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--warning-soft) 72%, transparent);
+  color: var(--warning);
+  padding: 0.45rem 0.55rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 .primary-button,
@@ -1025,9 +1141,24 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .job-stat-grid,
+  .job-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
   .fact-stat-grid > div + div {
     border-top: 1px solid var(--line);
     border-left: 0;
+  }
+
+  .job-stat-grid > div + div,
+  .job-meta-grid > div + div {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .job-card-head {
+    flex-direction: column;
   }
 
   .workflow-tabs {
