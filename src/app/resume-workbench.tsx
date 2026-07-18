@@ -643,7 +643,7 @@ export function ResumeWorkbench() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [resumeText, setResumeText] = useState(sampleResume);
   const [jobDescription, setJobDescription] = useState(sampleJd);
-  const [jobBatchInput, setJobBatchInput] = useState(sampleJobBatchInput);
+  const [jobBatchInput, setJobBatchInput] = useState("");
   const [answers, setAnswers] = useState("");
   const [resumeFile, setResumeFile] = useState<UploadedResumeFile | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
@@ -1577,11 +1577,7 @@ export function ResumeWorkbench() {
                   setJobState("idle");
                   setSelectedJob(null);
                 }}
-                placeholder={`可以直接粘贴 JD 链接，例如：
-https://example.com/jobs/ai-product-manager
-https://example.com/jobs/growth-pm
-
-也可以粘贴整段 JD 文本；多个 JD 用空行分隔。`}
+                placeholder="粘贴 JD 链接或整段 JD 文本；多个来源逐行或用空行分隔。"
                 rows={8}
                 value={jobBatchInput}
               />
