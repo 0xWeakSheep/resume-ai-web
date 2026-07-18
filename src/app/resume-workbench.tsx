@@ -13,6 +13,7 @@ type RequestState = "idle" | "loading" | "success" | "error";
 type ExportState = "idle" | "docx" | "pdf";
 type ActivePanel = "analysis" | "review" | "quality";
 type JobSourceStatus = "ready" | "failed" | "duplicate";
+type JobFilterStatus = "pass" | "review" | "blocked";
 type CareerFactCategory =
   | "profile"
   | "experience"
@@ -63,6 +64,23 @@ interface HardRequirement {
   text: string;
 }
 
+interface HardRequirementMatch {
+  type: string;
+  text: string;
+  status: "matched" | "partial" | "missing";
+  evidence: string[];
+}
+
+interface JobMatchReport {
+  score: number;
+  level: "high" | "medium" | "low" | "unmatched";
+  matchedKeywords: string[];
+  missingKeywords: string[];
+  hardRequirementResults: HardRequirementMatch[];
+  blockedByHardRequirements: boolean;
+  reasons: string[];
+}
+
 interface StandardizedJob {
   id: string;
   sourceType: "text" | "url";
@@ -76,6 +94,11 @@ interface StandardizedJob {
   keywords: string[];
   criticalKeywords: string[];
   hardRequirements: HardRequirement[];
+  similarityGroupId?: string;
+  duplicateOf?: string;
+  filterStatus?: JobFilterStatus;
+  priorityRank?: number;
+  match?: JobMatchReport;
   warnings: string[];
 }
 
@@ -86,6 +109,8 @@ interface JobStandardizeResponse {
     ready: number;
     failed: number;
     duplicate: number;
+    ranked?: number;
+    blocked?: number;
   };
 }
 
@@ -212,6 +237,25 @@ const jobStatusClassName: Record<JobSourceStatus, string> = {
   failed: "status-pill missing",
   duplicate: "status-pill partial",
 };
+
+const jobFilterLabel: Record<JobFilterStatus, string> = {
+  pass: "优先处理",
+  review: "待复核",
+  blocked: "硬门槛阻断",
+};
+
+const jobFilterClassName: Record<JobFilterStatus, string> = {
+  pass: "status-pill matched",
+  review: "status-pill partial",
+  blocked: "status-pill missing",
+};
+
+const hardRequirementStatusLabel: Record<HardRequirementMatch["status"], string> =
+  {
+    matched: "已满足",
+    partial: "部分满足",
+    missing: "未满足",
+  };
 
 const factCategoryOrder: CareerFactCategory[] = [
   "profile",
@@ -515,6 +559,7 @@ export function ResumeWorkbench() {
     }
 
     const { jobDescriptions, jobUrls } = parseJobSources(jobBatchInput);
+    const resumePayload = buildResumePayload(resumeText, resumeFile);
     if (jobDescriptions.length === 0 && jobUrls.length === 0) {
       setJobState("error");
       setErrorMessage("请粘贴至少一个 JD 文本，或输入至少一个 JD 链接。");
@@ -534,6 +579,12 @@ export function ResumeWorkbench() {
         body: JSON.stringify({
           jobDescriptions,
           jobUrls,
+          ...(resumePayload
+            ? {
+                resume: resumePayload,
+                answers,
+              }
+            : {}),
         }),
       });
 
@@ -656,7 +707,11 @@ export function ResumeWorkbench() {
 
   function handleUseStandardizedJob(job: StandardizedJob) {
     const nextJobDescription = job.normalizedText || job.rawText;
-    if (!nextJobDescription.trim() || job.status !== "ready") {
+    if (
+      !nextJobDescription.trim() ||
+      job.status !== "ready" ||
+      job.filterStatus === "blocked"
+    ) {
       return;
     }
 
@@ -953,6 +1008,14 @@ export function ResumeWorkbench() {
                     <strong>{jobResponse.summary.ready}</strong>
                   </div>
                   <div>
+                    <span>已排序</span>
+                    <strong>{jobResponse.summary.ranked ?? 0}</strong>
+                  </div>
+                  <div>
+                    <span>阻断</span>
+                    <strong>{jobResponse.summary.blocked ?? 0}</strong>
+                  </div>
+                  <div>
                     <span>失败/重复</span>
                     <strong>
                       {jobResponse.summary.failed}/
@@ -966,18 +1029,38 @@ export function ResumeWorkbench() {
                     <article className="job-card" key={job.id}>
                       <div className="job-card-head">
                         <div>
-                          <span className={jobStatusClassName[job.status]}>
-                            {jobStatusLabel[job.status]}
-                          </span>
+                          <div className="job-pill-row">
+                            {job.priorityRank ? (
+                              <span className="rank-badge">
+                                #{job.priorityRank}
+                              </span>
+                            ) : null}
+                            <span className={jobStatusClassName[job.status]}>
+                              {jobStatusLabel[job.status]}
+                            </span>
+                            {job.filterStatus ? (
+                              <span
+                                className={
+                                  jobFilterClassName[job.filterStatus]
+                                }
+                              >
+                                {jobFilterLabel[job.filterStatus]}
+                              </span>
+                            ) : null}
+                          </div>
                           <h4>{job.roleTitle}</h4>
                           <small>
                             {job.company ? `${job.company}｜` : ""}
                             {job.sourceType === "url" ? "链接来源" : "文本来源"}
+                            {job.duplicateOf ? `｜重复于 ${job.duplicateOf}` : ""}
                           </small>
                         </div>
                         <button
                           className="ghost-button"
-                          disabled={job.status !== "ready"}
+                          disabled={
+                            job.status !== "ready" ||
+                            job.filterStatus === "blocked"
+                          }
                           onClick={() => handleUseStandardizedJob(job)}
                           type="button"
                         >
@@ -997,38 +1080,88 @@ export function ResumeWorkbench() {
                         <>
                           <div className="job-meta-grid">
                             <div>
-                              <span>要求</span>
-                              <strong>{job.requirements.length}</strong>
+                              <span>匹配分</span>
+                              <strong>
+                                {job.match ? job.match.score : "未计算"}
+                              </strong>
+                            </div>
+                            <div>
+                              <span>匹配等级</span>
+                              <strong>{job.match?.level ?? "n/a"}</strong>
                             </div>
                             <div>
                               <span>硬门槛</span>
-                              <strong>{job.hardRequirements.length}</strong>
+                              <strong>
+                                {job.match
+                                  ? job.match.hardRequirementResults.length
+                                  : job.hardRequirements.length}
+                              </strong>
                             </div>
                             <div>
-                              <span>关键词</span>
-                              <strong>{job.keywords.length}</strong>
+                              <span>要求</span>
+                              <strong>{job.requirements.length}</strong>
                             </div>
                           </div>
 
-                          {job.hardRequirements.length > 0 ? (
+                          {job.match?.reasons.length ? (
+                            <div className="job-reason-list">
+                              {job.match.reasons.map((reason) => (
+                                <p key={`${job.id}-${reason}`}>{reason}</p>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          {job.match?.hardRequirementResults.length ? (
+                            <div className="hard-requirement-list">
+                              {job.match.hardRequirementResults
+                                .slice(0, 4)
+                                .map((item) => (
+                                  <span
+                                    className={`hard-status ${item.status}`}
+                                    key={`${job.id}-${item.type}-${item.text}`}
+                                  >
+                                    {hardRequirementStatusLabel[item.status]}｜
+                                    {item.type}：{item.text}
+                                  </span>
+                                ))}
+                            </div>
+                          ) : job.hardRequirements.length > 0 ? (
                             <div className="hard-requirement-list">
                               {job.hardRequirements.slice(0, 3).map((item) => (
-                                <span key={`${job.id}-${item.type}-${item.text}`}>
-                                  {item.type}：{item.text}
+                                <span
+                                  className="hard-status partial"
+                                  key={`${job.id}-${item.type}-${item.text}`}
+                                >
+                                  待匹配｜{item.type}：{item.text}
                                 </span>
                               ))}
                             </div>
                           ) : null}
 
                           <div className="keyword-row">
-                            {job.criticalKeywords.slice(0, 8).map((keyword) => (
-                              <span
-                                className="keyword matched-keyword"
-                                key={`${job.id}-${keyword}`}
-                              >
-                                {keyword}
-                              </span>
-                            ))}
+                            {(job.match?.matchedKeywords.length
+                              ? job.match.matchedKeywords
+                              : job.criticalKeywords
+                            )
+                              .slice(0, 8)
+                              .map((keyword) => (
+                                <span
+                                  className="keyword matched-keyword"
+                                  key={`${job.id}-matched-${keyword}`}
+                                >
+                                  {keyword}
+                                </span>
+                              ))}
+                            {job.match?.missingKeywords
+                              .slice(0, 8)
+                              .map((keyword) => (
+                                <span
+                                  className="keyword missing-keyword"
+                                  key={`${job.id}-missing-${keyword}`}
+                                >
+                                  {keyword}
+                                </span>
+                              ))}
                           </div>
                         </>
                       ) : null}

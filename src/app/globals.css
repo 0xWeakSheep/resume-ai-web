@@ -648,9 +648,12 @@ textarea {
   background: var(--surface);
 }
 
-.job-stat-grid,
+.job-stat-grid {
+  grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+}
+
 .job-meta-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .job-stat-grid > div,
@@ -714,6 +717,25 @@ textarea {
   line-height: 1.25;
 }
 
+.job-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.rank-badge {
+  display: inline-flex;
+  min-height: 1.75rem;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--foreground);
+  color: var(--background);
+  padding: 0.25rem 0.65rem;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .job-warning-list {
   display: grid;
   gap: 0.45rem;
@@ -733,13 +755,41 @@ textarea {
   gap: 0.45rem;
 }
 
+.job-reason-list {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.job-reason-list p {
+  margin: 0;
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--info-soft) 66%, transparent);
+  color: var(--info);
+  padding: 0.5rem 0.6rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
 .hard-requirement-list span {
   border-radius: 0.45rem;
-  background: color-mix(in srgb, var(--warning-soft) 72%, transparent);
-  color: var(--warning);
   padding: 0.45rem 0.55rem;
   font-size: 0.82rem;
   line-height: 1.45;
+}
+
+.hard-status.matched {
+  background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
+  color: var(--accent);
+}
+
+.hard-status.partial {
+  background: color-mix(in srgb, var(--warning-soft) 72%, transparent);
+  color: var(--warning);
+}
+
+.hard-status.missing {
+  background: color-mix(in srgb, var(--danger-soft) 76%, transparent);
+  color: var(--danger);
 }
 
 .primary-button,
