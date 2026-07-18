@@ -1458,7 +1458,7 @@ export function ResumeWorkbench() {
           ) : null}
           {statusMessage ? <p className="status-message">{statusMessage}</p> : null}
 
-          <label className="field">
+          <label className="field resume-text-field">
             <span>简历文本</span>
             <textarea
               value={resumeText}
@@ -1466,19 +1466,23 @@ export function ResumeWorkbench() {
                 setResumeText(event.target.value);
                 resetFactBase();
               }}
-              rows={12}
+              rows={6}
             />
           </label>
 
           <label className="file-field">
-            <span>或上传 PDF / DOCX / TXT</span>
+            <span>优先上传 PDF / DOCX / TXT 简历</span>
             <input
               accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
               onChange={handleFileChange}
               ref={fileInputRef}
               type="file"
             />
-            <small>{resumeFile ? resumeFile.name : "文本为空时使用上传文件"}</small>
+            <small>
+              {resumeFile
+                ? `已选择：${resumeFile.name}`
+                : "上传文件后会优先使用文件内容；文本框可作为备用输入。"}
+            </small>
           </label>
 
           <section className="fact-base-card" aria-live="polite">
@@ -1553,11 +1557,19 @@ export function ResumeWorkbench() {
                 <p className="card-subcopy">
                   支持多个 JD 文本或链接；分析后会自动选择最适合优先处理的岗位。
                 </p>
+                <div className="jd-link-callout">
+                  <span>可以直接甩 JD 链接</span>
+                  <p>
+                    多个链接逐行粘贴即可；如果是整段 JD 文本，用空行分隔。
+                  </p>
+                </div>
               </div>
             </div>
 
-            <label className="field compact-field">
-              <span>批量 JD 文本 / 链接</span>
+            <label className="field compact-field jd-source-field">
+              <span>
+                批量 JD 文本 / 链接 <strong>支持直接粘贴链接</strong>
+              </span>
               <textarea
                 onChange={(event) => {
                   setJobBatchInput(event.target.value);
@@ -1565,7 +1577,11 @@ export function ResumeWorkbench() {
                   setJobState("idle");
                   setSelectedJob(null);
                 }}
-                placeholder="多个 JD 文本用空行分隔；多个链接可以逐行粘贴。"
+                placeholder={`可以直接粘贴 JD 链接，例如：
+https://example.com/jobs/ai-product-manager
+https://example.com/jobs/growth-pm
+
+也可以粘贴整段 JD 文本；多个 JD 用空行分隔。`}
                 rows={8}
                 value={jobBatchInput}
               />
