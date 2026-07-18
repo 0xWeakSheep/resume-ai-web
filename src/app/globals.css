@@ -1395,6 +1395,11 @@ textarea {
   line-height: 1.5;
 }
 
+.mapping-evidence-list {
+  display: grid;
+  gap: 0.3rem;
+}
+
 .comparison-card {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;

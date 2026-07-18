@@ -571,32 +571,76 @@ function buildDraftFromSuggestions(
   decisions: Record<string, RewriteDecision>,
   edits: Record<string, string>,
 ) {
-  const acceptedBullets = payload.rewrite.rewrittenExperienceBullets
-    .map((suggestion, index) => {
-      const key = getSuggestionKey(suggestion, index);
+  const draftLines = payload.rewrite.finalResumeMarkdown.split("\n");
+  const consumedLineIndexes = new Set<number>();
 
-      if (decisions[key] === "rejected") {
-        return null;
+  payload.rewrite.rewrittenExperienceBullets.forEach((suggestion, index) => {
+    const key = getSuggestionKey(suggestion, index);
+    const originalAfter = suggestion.after.trim();
+    const originalBefore = suggestion.before.trim();
+    const lineIndex = draftLines.findIndex((line, candidateIndex) => {
+      if (consumedLineIndexes.has(candidateIndex)) {
+        return false;
       }
 
-      const edited = edits[key] ?? suggestion.after;
-      return edited.trim() ? `- ${edited.trim()}` : null;
-    })
-    .filter((line): line is string => Boolean(line));
-  const nextBulletSection =
-    acceptedBullets.length > 0
-      ? acceptedBullets.join("\n")
-      : "- 暂无已接受改写，请先接受或编辑至少一条修改。";
-  const sectionPattern =
-    /## 重点经历改写\n[\s\S]*?\n\n## 建议强调技能/;
+      const content = line
+        .replace(
+          /^\s*(?:(?:[-*•·]|\d+[).、]|[（(]?\d+[）)])\s*)/u,
+          "",
+        )
+        .trim();
 
-  if (!sectionPattern.test(payload.rewrite.finalResumeMarkdown)) {
-    return `${payload.rewrite.finalResumeMarkdown}\n\n## 已接受改写\n${nextBulletSection}\n`;
+      return content === originalAfter || content === originalBefore;
+    });
+
+    if (lineIndex < 0) {
+      return;
+    }
+
+    const sourceLine = draftLines[lineIndex];
+    const prefix =
+      sourceLine.match(
+        /^\s*(?:(?:[-*•·]|\d+[).、]|[（(]?\d+[）)])\s*)/u,
+      )?.[0] ?? "";
+    const decision =
+      decisions[key] ??
+      (suggestion.acceptedByDefault === false ? "rejected" : "accepted");
+    const replacement =
+      decision === "rejected"
+        ? suggestion.before
+        : (edits[key] ?? suggestion.after);
+
+    draftLines[lineIndex] = `${prefix}${replacement
+      .replace(
+        /^\s*(?:(?:[-*•·]|\d+[).、]|[（(]?\d+[）)])\s*)/u,
+        "",
+      )
+      .trim()}`;
+    consumedLineIndexes.add(lineIndex);
+  });
+
+  return draftLines.join("\n");
+}
+
+const legacyReportMarkers = [
+  "## 资料概览",
+  "## 岗位匹配摘要",
+  "## 重点经历改写",
+  "## 建议强调技能",
+  "## 人工审核提示",
+  "生成边界：",
+] as const;
+
+function isDeliverableResumeMarkdown(markdown: unknown): markdown is string {
+  if (typeof markdown !== "string") {
+    return false;
   }
 
-  return payload.rewrite.finalResumeMarkdown.replace(
-    sectionPattern,
-    `## 重点经历改写\n${nextBulletSection}\n\n## 建议强调技能`,
+  const normalized = markdown.trim();
+
+  return (
+    normalized.length > 0 &&
+    legacyReportMarkers.every((marker) => !normalized.includes(marker))
   );
 }
 
@@ -932,6 +976,18 @@ export function ResumeWorkbench() {
     setRequestState("idle");
   }
 
+  function invalidateResumeDerivedState() {
+    resetFactBase();
+    setJobResponse(null);
+    setJobState("idle");
+    if (selectedJob?.id.startsWith("ROLE-")) {
+      setJobDescription("");
+    }
+    setSelectedJob(null);
+    resetGeneratedResume();
+    setErrorMessage("");
+  }
+
   function persistVersionRecords(nextRecords: ResumeVersionRecord[]) {
     const trimmedRecords = nextRecords.slice(0, MAX_VERSION_RECORDS);
 
@@ -1018,7 +1074,7 @@ export function ResumeWorkbench() {
     const file = event.target.files?.[0];
     if (!file) {
       setResumeFile(null);
-      resetFactBase();
+      invalidateResumeDerivedState();
       return;
     }
 
@@ -1028,7 +1084,7 @@ export function ResumeWorkbench() {
       mimeType: file.type,
       dataBase64,
     });
-    resetFactBase();
+    invalidateResumeDerivedState();
   }
 
   async function handleExtractFacts() {
@@ -1269,6 +1325,7 @@ export function ResumeWorkbench() {
       return;
     }
 
+    resetGeneratedResume();
     setRequestState("loading");
     setStatusMessage("");
     setErrorMessage("");
@@ -1297,6 +1354,16 @@ export function ResumeWorkbench() {
       }
 
       const payload = (await response.json()) as CustomizeResponse;
+      if (
+        !isDeliverableResumeMarkdown(
+          payload?.rewrite?.finalResumeMarkdown,
+        )
+      ) {
+        throw new Error(
+          "生成结果仍是分析摘要，不是完整简历正文，请稍后重试。",
+        );
+      }
+
       const initialDecisions = buildInitialSuggestionDecisions(
         payload.rewrite.rewrittenExperienceBullets,
       );
@@ -1715,7 +1782,7 @@ export function ResumeWorkbench() {
               value={resumeText}
               onChange={(event) => {
                 setResumeText(event.target.value);
-                resetFactBase();
+                invalidateResumeDerivedState();
               }}
               placeholder="如果暂时没有文件，可以在这里粘贴完整简历文本；上传文件后系统会优先使用文件内容。"
               rows={6}
@@ -2184,7 +2251,7 @@ export function ResumeWorkbench() {
               value={answers}
               onChange={(event) => {
                 setAnswers(event.target.value);
-                resetFactBase();
+                invalidateResumeDerivedState();
               }}
               placeholder="可选：补充项目成果、指标、职责边界。"
               rows={4}
@@ -2266,7 +2333,7 @@ export function ResumeWorkbench() {
                 </article>
                 <article className="chart-card">
                   <div>
-                    <span>硬门槛风险</span>
+                    <span>未匹配要求</span>
                     <strong>
                       {
                         result.analysis.requirementMappings.filter(
@@ -2275,7 +2342,7 @@ export function ResumeWorkbench() {
                       }
                     </strong>
                   </div>
-                  <p>未满足项会保留在质量检查和人工审核清单里。</p>
+                  <p>未匹配项会保留在质量检查和人工审核清单里。</p>
                 </article>
               </div>
 
@@ -2330,10 +2397,33 @@ export function ResumeWorkbench() {
                             <code>{mapping.requirementId}</code>
                           </div>
                           <p>{mapping.requirement}</p>
+                          {mapping.matchedKeywords.length > 0 ? (
+                            <div
+                              className="keyword-row"
+                              aria-label="匹配关键词"
+                            >
+                              {mapping.matchedKeywords.map((keyword) => (
+                                <span
+                                  className="keyword matched-keyword"
+                                  key={`${mapping.requirementId}-${keyword}`}
+                                >
+                                  {keyword}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
                           {mapping.evidence.length > 0 ? (
-                            <small>{mapping.evidence[0]}</small>
+                            <div className="mapping-evidence-list">
+                              {mapping.evidence.slice(0, 2).map((evidence) => (
+                                <small
+                                  key={`${mapping.requirementId}-${evidence}`}
+                                >
+                                  证据：{evidence}
+                                </small>
+                              ))}
+                            </div>
                           ) : (
-                            <small>{mapping.recommendation}</small>
+                            <small>建议：{mapping.recommendation}</small>
                           )}
                         </article>
                       ))}
@@ -2525,7 +2615,7 @@ export function ResumeWorkbench() {
                       <h2>可编辑最终稿</h2>
                     </div>
                     <label className="draft-editor">
-                      <span>最终稿 Markdown</span>
+                      <span>完整简历正文（可编辑）</span>
                       <textarea
                         onChange={(event) => {
                           setEditableDraft(event.target.value);
