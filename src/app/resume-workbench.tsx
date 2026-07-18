@@ -313,7 +313,7 @@ const jobStatusClassName: Record<JobSourceStatus, string> = {
 const jobFilterLabel: Record<JobFilterStatus, string> = {
   pass: "优先处理",
   review: "待复核",
-  blocked: "硬门槛阻断",
+  blocked: "硬门槛风险",
 };
 
 const jobFilterClassName: Record<JobFilterStatus, string> = {
@@ -622,7 +622,7 @@ function findBestReadyJob(payload: JobStandardizeResponse) {
   let bestJob: StandardizedJob | null = null;
 
   for (const job of payload.jobs) {
-    if (job.status !== "ready" || job.filterStatus === "blocked") {
+    if (job.status !== "ready") {
       continue;
     }
 
@@ -635,10 +635,15 @@ function findBestReadyJob(payload: JobStandardizeResponse) {
     const bestRank = bestJob.priorityRank ?? Number.POSITIVE_INFINITY;
     const currentScore = job.match?.score ?? 0;
     const bestScore = bestJob.match?.score ?? 0;
+    const currentRiskWeight = job.filterStatus === "blocked" ? 1 : 0;
+    const bestRiskWeight = bestJob.filterStatus === "blocked" ? 1 : 0;
+    const hasSameRisk = currentRiskWeight === bestRiskWeight;
 
     if (
-      currentRank < bestRank ||
-      (currentRank === bestRank && currentScore > bestScore)
+      currentRiskWeight < bestRiskWeight ||
+      (hasSameRisk &&
+        (currentRank < bestRank ||
+          (currentRank === bestRank && currentScore > bestScore)))
     ) {
       bestJob = job;
     }
@@ -1197,10 +1202,14 @@ export function ResumeWorkbench() {
       if (bestJob) {
         handleUseStandardizedJob(bestJob, { silent: true });
       }
+      const selectedRiskCopy =
+        bestJob?.filterStatus === "blocked"
+          ? "，该岗位存在硬门槛风险，但已允许继续生成"
+          : "";
       setStatusMessage(
         `已处理 ${payload.summary.total} 个 JD 来源，可用 ${payload.summary.ready} 个${
           bestJob ? `，已自动选择 ${bestJob.roleTitle}` : ""
-        }。`,
+        }${selectedRiskCopy}。`,
       );
       return true;
     } catch (error) {
@@ -1407,11 +1416,7 @@ export function ResumeWorkbench() {
     options: { silent?: boolean } = {},
   ) {
     const nextJobDescription = job.normalizedText || job.rawText;
-    if (
-      !nextJobDescription.trim() ||
-      job.status !== "ready" ||
-      job.filterStatus === "blocked"
-    ) {
+    if (!nextJobDescription.trim() || job.status !== "ready") {
       return;
     }
 
@@ -1427,8 +1432,12 @@ export function ResumeWorkbench() {
     });
     resetGeneratedResume();
     if (!options.silent) {
+      const riskCopy =
+        job.filterStatus === "blocked"
+          ? "该岗位存在未满足硬门槛，会作为风险提示保留；可以继续生成，但需要人工复核。"
+          : "可以继续生成定制简历。";
       setStatusMessage(
-        `已选择 ${job.roleTitle}${job.company ? `｜${job.company}` : ""} 作为本次定制岗位。`,
+        `已选择 ${job.roleTitle}${job.company ? `｜${job.company}` : ""} 作为本次定制岗位。${riskCopy}`,
       );
     }
     setErrorMessage("");
@@ -1846,7 +1855,7 @@ export function ResumeWorkbench() {
                     <strong>{jobResponse.summary.ranked ?? 0}</strong>
                   </div>
                   <div>
-                    <span>阻断</span>
+                    <span>风险</span>
                     <strong>{jobResponse.summary.blocked ?? 0}</strong>
                   </div>
                   <div>
@@ -1861,8 +1870,7 @@ export function ResumeWorkbench() {
                 <div className="job-card-list">
                   {jobResponse.jobs.map((job) => {
                     const isSelectedJob = selectedJob?.id === job.id;
-                    const canSelectJob =
-                      job.status === "ready" && job.filterStatus !== "blocked";
+                    const canSelectJob = job.status === "ready";
 
                     return (
                     <article
@@ -1905,7 +1913,9 @@ export function ResumeWorkbench() {
                             onClick={() => handleUseStandardizedJob(job)}
                             type="button"
                           >
-                            选择
+                            {job.filterStatus === "blocked"
+                              ? "继续选择"
+                              : "选择"}
                           </button>
                         ) : null}
                       </div>
