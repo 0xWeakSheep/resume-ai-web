@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ChangeEvent,
   type FormEvent,
 } from "react";
@@ -641,7 +642,7 @@ function readStoredVersionRecords(): ResumeVersionRecord[] {
 export function ResumeWorkbench() {
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [resumeText, setResumeText] = useState(sampleResume);
+  const [resumeText, setResumeText] = useState("");
   const [jobDescription, setJobDescription] = useState("");
   const [jobBatchInput, setJobBatchInput] = useState("");
   const [answers, setAnswers] = useState("");
@@ -767,6 +768,56 @@ export function ResumeWorkbench() {
   const acceptedSuggestionPercent = totalSuggestionCount
     ? Math.round((acceptedSuggestionCount / totalSuggestionCount) * 100)
     : 0;
+  const workflowSteps = [
+    {
+      label: "简历材料",
+      done: hasResumeMaterial,
+      detail: resumeFile
+        ? `已上传 ${resumeFile.name}`
+        : resumeText.trim()
+          ? "已填写文本备用材料"
+          : "优先上传 PDF / DOCX / TXT，文本可作为备用",
+    },
+    {
+      label: "目标 JD",
+      done: hasJobMaterial,
+      detail: hasJobSources
+        ? `${jdSourceCount} 个 JD 来源待分析`
+        : hasSelectedJobDescription
+          ? "已选择定制岗位"
+          : "粘贴链接或整段 JD 文本",
+    },
+    {
+      label: "事实库",
+      done: Boolean(factResponse),
+      detail: factResponse
+        ? `${factResponse.factBase.totalFacts} 条职业事实`
+        : "分析后生成可追溯事实来源",
+    },
+    {
+      label: "匹配排序",
+      done: Boolean(jobResponse) || Boolean(selectedJob),
+      detail: selectedJob
+        ? `当前目标：${selectedJob.roleTitle}`
+        : jobResponse
+          ? `${jobResponse.summary.ready} 个可用岗位`
+          : "批量 JD 会自动去重、过滤并排序",
+    },
+    {
+      label: "终稿交付",
+      done: Boolean(result),
+      detail: result
+        ? `${acceptedSuggestionCount}/${totalSuggestionCount} 条改写已纳入`
+        : "生成后审核、保存版本并导出 PDF / DOCX",
+    },
+  ];
+  const nextStepCopy = !hasResumeMaterial
+    ? "先上传简历文件；如果只有纯文本，也可以填入左侧备用文本框。"
+    : !hasJobMaterial
+      ? "粘贴一个或多个 JD 链接/文本后，即可开始分析。"
+      : isAnalysisReady
+        ? "材料分析已完成，可以生成定制简历并进入审核导出。"
+        : "点击主按钮分析材料与 JD，系统会生成事实库并选择优先岗位。";
 
   function resetFactBase() {
     setFactResponse(null);
@@ -1284,7 +1335,7 @@ export function ResumeWorkbench() {
 
     applySuggestionState(nextDecisions, nextEdits);
     setConfirmedAt(null);
-    setStatusMessage("已恢复 AI 草稿。");
+    setStatusMessage("已恢复生成草稿。");
   }
 
   async function handleCopyDraft() {
@@ -1415,7 +1466,7 @@ export function ResumeWorkbench() {
               onClick={handleFillSampleData}
               type="button"
             >
-              填入样例
+              导入演示数据
             </button>
           </div>
 
@@ -1459,13 +1510,14 @@ export function ResumeWorkbench() {
           {statusMessage ? <p className="status-message">{statusMessage}</p> : null}
 
           <label className="field resume-text-field">
-            <span>简历文本</span>
+            <span>简历文本（备用）</span>
             <textarea
               value={resumeText}
               onChange={(event) => {
                 setResumeText(event.target.value);
                 resetFactBase();
               }}
+              placeholder="如果暂时没有文件，可以在这里粘贴完整简历文本；上传文件后系统会优先使用文件内容。"
               rows={6}
             />
           </label>
@@ -2170,7 +2222,7 @@ export function ResumeWorkbench() {
                         onClick={handleResetDraft}
                         type="button"
                       >
-                        恢复 AI 草稿
+                        恢复生成草稿
                       </button>
                       <button
                         className="text-button"
@@ -2267,12 +2319,45 @@ export function ResumeWorkbench() {
             </>
           ) : (
             <div className="empty-state">
-              <div className="empty-state-head">
-                <p className="eyebrow">Result preview</p>
-                <h2>结果会在这里生成</h2>
-                <p>
-                  右侧先显示当前材料准备度；生成后切换为匹配分析、质量检查和审核导出。
-                </p>
+              <div className="empty-state-head delivery-ready-card">
+                <div className="empty-state-title-row">
+                  <div>
+                    <p className="eyebrow">Delivery check</p>
+                    <h2>交付检查台</h2>
+                    <p>{nextStepCopy}</p>
+                  </div>
+                  <div
+                    className="readiness-dial"
+                    aria-label="当前准备度"
+                    style={{ "--readiness": `${readinessPercent}` } as CSSProperties}
+                  >
+                    <strong>{readinessPercent}%</strong>
+                    <span>准备度</span>
+                  </div>
+                </div>
+                <button
+                  className="primary-button compact"
+                  disabled={!canUsePrimaryAction}
+                  onClick={handlePrimaryWorkflowAction}
+                  type="button"
+                >
+                  {primaryActionLabel}
+                </button>
+              </div>
+
+              <div className="delivery-step-list" aria-label="交付流程状态">
+                {workflowSteps.map((step, index) => (
+                  <article
+                    className={`delivery-step${step.done ? " done" : ""}`}
+                    key={step.label}
+                  >
+                    <span>{String(index + 1).padStart(2, "0")}</span>
+                    <div>
+                      <strong>{step.label}</strong>
+                      <p>{step.detail}</p>
+                    </div>
+                  </article>
+                ))}
               </div>
 
               <div className="preview-metric-grid">
