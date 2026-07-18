@@ -15,6 +15,7 @@ type ActivePanel = "analysis" | "review" | "quality";
 type JobSourceStatus = "ready" | "failed" | "duplicate";
 type JobFilterStatus = "pass" | "review" | "blocked";
 type RewriteDecision = "accepted" | "rejected";
+type ExportFormat = "docx" | "pdf";
 type CareerFactCategory =
   | "profile"
   | "experience"
@@ -212,6 +213,24 @@ interface SelectedJobContext {
   filterStatus?: JobFilterStatus;
 }
 
+interface ResumeVersionRecord {
+  id: string;
+  fingerprint: string;
+  roleTitle: string;
+  company?: string;
+  jobDescription: string;
+  draftMarkdown: string;
+  selectedJob: SelectedJobContext | null;
+  createdAt: string;
+  updatedAt: string;
+  exportedFormats: ExportFormat[];
+  modificationSummary: {
+    total: number;
+    accepted: number;
+    rejected: number;
+  };
+}
+
 const sampleResume = `张三
 产品经理
 
@@ -237,6 +256,10 @@ const sampleJobBatchInput = `${sampleJd}
 岗位：增长产品经理
 1. 本科及以上学历，3 年以上增长或 AI 产品经验。
 2. 熟悉数据分析、A/B测试 和跨团队项目推进。`;
+
+const VERSION_STORAGE_KEY = "resume-ai.version-records.v1";
+const VERSION_STORAGE_SCHEMA = 1;
+const MAX_VERSION_RECORDS = 20;
 
 const statusLabel: Record<RequirementMapping["status"], string> = {
   matched: "已匹配",
@@ -393,10 +416,19 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
-function buildFileName(extension: "docx" | "pdf") {
-  const date = new Date().toISOString().slice(0, 10);
+function sanitizeFilePart(value: string) {
+  return value
+    .trim()
+    .replace(/[^\p{L}\p{N}-]+/gu, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 36);
+}
 
-  return `resume-ai-${date}.${extension}`;
+function buildFileName(extension: "docx" | "pdf", roleTitle?: string) {
+  const date = new Date().toISOString().slice(0, 10);
+  const role = roleTitle ? sanitizeFilePart(roleTitle) : "";
+
+  return `resume-ai${role ? `-${role}` : ""}-${date}.${extension}`;
 }
 
 function downloadBlob(blob: Blob, fileName: string) {
@@ -530,6 +562,53 @@ function buildDraftFromSuggestions(
   );
 }
 
+function stableHash(value: string) {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) | 0;
+  }
+
+  return Math.abs(hash).toString(36);
+}
+
+function createVersionFingerprint(
+  roleTitle: string,
+  jobDescription: string,
+  draftMarkdown: string,
+) {
+  return stableHash(`${roleTitle}\n${jobDescription}\n${draftMarkdown}`);
+}
+
+function readStoredVersionRecords(): ResumeVersionRecord[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(VERSION_STORAGE_KEY);
+    if (!rawValue) {
+      return [];
+    }
+
+    const payload = JSON.parse(rawValue) as {
+      schema?: number;
+      records?: ResumeVersionRecord[];
+    };
+
+    if (
+      payload.schema !== VERSION_STORAGE_SCHEMA ||
+      !Array.isArray(payload.records)
+    ) {
+      return [];
+    }
+
+    return payload.records.slice(0, MAX_VERSION_RECORDS);
+  } catch {
+    return [];
+  }
+}
+
 export function ResumeWorkbench() {
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -560,6 +639,10 @@ export function ResumeWorkbench() {
   const [suggestionEdits, setSuggestionEdits] = useState<Record<string, string>>(
     {},
   );
+  const [versionRecords, setVersionRecords] = useState<ResumeVersionRecord[]>(
+    () => readStoredVersionRecords(),
+  );
+  const [currentVersionId, setCurrentVersionId] = useState<string | null>(null);
   const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
 
   const coveragePercent = result
@@ -591,9 +674,92 @@ export function ResumeWorkbench() {
     setEditableDraft("");
     setSuggestionDecisions({});
     setSuggestionEdits({});
+    setCurrentVersionId(null);
     setConfirmedAt(null);
     setActivePanel("analysis");
     setRequestState("idle");
+  }
+
+  function persistVersionRecords(nextRecords: ResumeVersionRecord[]) {
+    const trimmedRecords = nextRecords.slice(0, MAX_VERSION_RECORDS);
+
+    setVersionRecords(trimmedRecords);
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(
+      VERSION_STORAGE_KEY,
+      JSON.stringify({
+        schema: VERSION_STORAGE_SCHEMA,
+        records: trimmedRecords,
+      }),
+    );
+  }
+
+  function saveCurrentVersion(exportFormat?: ExportFormat) {
+    if (!result || !editableDraft.trim()) {
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    const roleTitle = result.rewrite.targetRole;
+    const fingerprint = createVersionFingerprint(
+      roleTitle,
+      jobDescription,
+      editableDraft,
+    );
+    const existingRecord = versionRecords.find(
+      (record) => record.fingerprint === fingerprint,
+    );
+    const exportedFormats = exportFormat
+      ? Array.from(
+          new Set([...(existingRecord?.exportedFormats ?? []), exportFormat]),
+        )
+      : existingRecord?.exportedFormats ?? [];
+    const accepted = Object.values(suggestionDecisions).filter(
+      (decision) => decision === "accepted",
+    ).length;
+    const rejected = Object.values(suggestionDecisions).filter(
+      (decision) => decision === "rejected",
+    ).length;
+    const record: ResumeVersionRecord = {
+      id: existingRecord?.id ?? crypto.randomUUID(),
+      fingerprint,
+      roleTitle,
+      company: selectedJob?.company,
+      jobDescription,
+      draftMarkdown: editableDraft,
+      selectedJob,
+      createdAt: existingRecord?.createdAt ?? now,
+      updatedAt: now,
+      exportedFormats,
+      modificationSummary: {
+        total: result.rewrite.rewrittenExperienceBullets.length,
+        accepted,
+        rejected,
+      },
+    };
+    const nextRecords = [
+      record,
+      ...versionRecords.filter((item) => item.id !== record.id),
+    ];
+
+    persistVersionRecords(nextRecords);
+    setCurrentVersionId(record.id);
+
+    return record;
+  }
+
+  function handleLoadVersion(record: ResumeVersionRecord) {
+    setJobDescription(record.jobDescription);
+    setSelectedJob(record.selectedJob);
+    setEditableDraft(record.draftMarkdown);
+    setCurrentVersionId(record.id);
+    setConfirmedAt(null);
+    setActivePanel("review");
+    setStatusMessage("已载入历史版本，可继续编辑或重新确认导出。");
   }
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -808,6 +974,7 @@ export function ResumeWorkbench() {
     setEditableDraft("");
     setSuggestionDecisions({});
     setSuggestionEdits({});
+    setCurrentVersionId(null);
     setConfirmedAt(null);
     setActivePanel("analysis");
     setErrorMessage("");
@@ -820,9 +987,10 @@ export function ResumeWorkbench() {
   }
 
   function handleConfirmDraft() {
+    saveCurrentVersion();
     setConfirmedAt(new Date().toLocaleString("zh-CN"));
     setActivePanel("review");
-    setStatusMessage("最终稿已确认，可以导出。");
+    setStatusMessage("最终稿已确认并保存为当前版本，可以导出。");
   }
 
   function handleUseQuestion(question: string) {
@@ -977,9 +1145,14 @@ export function ResumeWorkbench() {
         sections: [{ children: paragraphs }],
       });
       const blob = await Packer.toBlob(document);
+      const record = saveCurrentVersion("docx");
 
-      downloadBlob(blob, buildFileName("docx"));
-      setStatusMessage("DOCX 已生成。");
+      downloadBlob(blob, buildFileName("docx", result?.rewrite.targetRole));
+      setStatusMessage(
+        record
+          ? `DOCX 已生成，并关联到版本 ${record.id.slice(0, 8)}。`
+          : "DOCX 已生成。",
+      );
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "DOCX 导出失败");
       setRequestState("error");
@@ -1004,13 +1177,19 @@ export function ResumeWorkbench() {
       return;
     }
 
+    const record = saveCurrentVersion("pdf");
+
     printWindow.document.write(buildPrintDocument(editableDraft));
     printWindow.document.close();
     printWindow.focus();
     printWindow.setTimeout(() => {
       printWindow.print();
       setExportState("idle");
-      setStatusMessage("PDF 打印窗口已打开。");
+      setStatusMessage(
+        record
+          ? `PDF 打印窗口已打开，并关联到版本 ${record.id.slice(0, 8)}。`
+          : "PDF 打印窗口已打开。",
+      );
     }, 150);
   }
 
@@ -1054,6 +1233,7 @@ export function ResumeWorkbench() {
                 setEditableDraft("");
                 setSuggestionDecisions({});
                 setSuggestionEdits({});
+                setCurrentVersionId(null);
                 setConfirmedAt(null);
                 setActivePanel("analysis");
                 setStatusMessage("");
@@ -1807,6 +1987,76 @@ export function ResumeWorkbench() {
                         <span className="confirm-state">编辑后需重新确认</span>
                       )}
                     </div>
+                  </div>
+
+                  <div className="result-section">
+                    <div className="section-title">
+                      <h2>职位—简历版本</h2>
+                    </div>
+                    <p className="version-privacy-note">
+                      版本记录只保存在当前浏览器本地，用于 MVP 阶段回看岗位、JD、最终稿和导出关系。
+                    </p>
+                    <div className="draft-actions">
+                      <button
+                        className="ghost-button"
+                        disabled={!result || !editableDraft.trim()}
+                        onClick={() => {
+                          const record = saveCurrentVersion();
+                          setStatusMessage(
+                            record
+                              ? `已保存当前版本 ${record.id.slice(0, 8)}。`
+                              : "当前没有可保存版本。",
+                          );
+                        }}
+                        type="button"
+                      >
+                        保存当前版本
+                      </button>
+                      {currentVersionId ? (
+                        <span className="confirm-state">
+                          当前版本：{currentVersionId.slice(0, 8)}
+                        </span>
+                      ) : null}
+                    </div>
+                    {versionRecords.length > 0 ? (
+                      <div className="version-list">
+                        {versionRecords.map((record) => (
+                          <article className="version-card" key={record.id}>
+                            <div>
+                              <strong>{record.roleTitle}</strong>
+                              <span>
+                                {new Date(record.updatedAt).toLocaleString(
+                                  "zh-CN",
+                                )}
+                              </span>
+                            </div>
+                            <p>
+                              {record.company ? `${record.company}｜` : ""}
+                              修改 {record.modificationSummary.total} 条，接受{" "}
+                              {record.modificationSummary.accepted} 条，拒绝{" "}
+                              {record.modificationSummary.rejected} 条
+                            </p>
+                            <small>
+                              导出：
+                              {record.exportedFormats.length > 0
+                                ? record.exportedFormats.join(" / ")
+                                : "尚未导出"}
+                            </small>
+                            <button
+                              className="ghost-button"
+                              onClick={() => handleLoadVersion(record)}
+                              type="button"
+                            >
+                              载入版本
+                            </button>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="fact-empty">
+                        暂无版本。确认最终稿或导出后会自动保存。
+                      </p>
+                    )}
                   </div>
                 </>
               ) : null}
