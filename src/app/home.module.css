@@ -3,9 +3,38 @@
    Space Grotesk（英文品牌/数字/微型标签，--font-home-grotesk）
    均由 page.tsx 通过 next/font CSS variables 注入本 shell。 */
 
+/* ---------- 首页局部语义色 tokens ----------
+   冷银灰中性色 + 唯一青瓷绿 accent，仅作用于 .shell 作用域。
+   浅色：青瓷绿在浅底上正文级对比度 ≥ 4.5；
+   深色：背景自 #111412 提亮至 #151a17，
+   background → surface → surface-raised 逐级提亮建立表面层级。 */
+
 .shell {
+  --background: #f3f5f4;
+  --surface: #f9faf9;
+  --surface-raised: #fcfdfc;
+  --foreground: #1f2523;
+  --muted: #5c6662;
+  --line: #d3d9d5;
+  --accent: #15705a;
+  --accent-hover: #0f5a47;
+  --accent-soft: #ddebe4;
+  --accent-contrast: #f7fcfa;
+
   min-height: 100dvh;
-  background: var(--background);
+  /* 统一光源：自左上进入的银绿柔光，全页共享 */
+  background:
+    radial-gradient(
+      64rem 36rem at 14% -8%,
+      color-mix(in srgb, var(--accent) 6%, transparent),
+      transparent 62%
+    ),
+    linear-gradient(
+      168deg,
+      color-mix(in srgb, var(--surface-raised) 34%, var(--background)) 0%,
+      var(--background) 38rem
+    ),
+    var(--background);
   color: var(--foreground);
   font-family:
     var(--font-home-sans),
@@ -14,6 +43,21 @@
     "Hiragino Sans GB",
     "Microsoft YaHei",
     sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  .shell {
+    --background: #151a17;
+    --surface: #1b211d;
+    --surface-raised: #232b26;
+    --foreground: #edf1ee;
+    --muted: #a3ada6;
+    --line: #2e3530;
+    --accent: #7cc6a8;
+    --accent-hover: #99d9bf;
+    --accent-soft: #20362c;
+    --accent-contrast: #0e1a14;
+  }
 }
 
 .shell a {
@@ -47,8 +91,12 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
-  background: color-mix(in srgb, var(--background) 86%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  background: color-mix(in srgb, var(--background) 84%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 42%, transparent),
+    0 14px 34px -22px color-mix(in srgb, var(--accent) 32%, transparent);
+  -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
 }
 
@@ -130,12 +178,14 @@
   margin-left: 0.6rem;
   border: 1px solid var(--foreground);
   border-radius: 999px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 36%, transparent);
   color: var(--foreground);
   padding: 0 1.15rem;
   font-weight: 700;
   text-decoration: none;
   transition:
     background-color 160ms ease,
+    box-shadow 160ms ease,
     color 160ms ease,
     border-color 160ms ease;
 }
@@ -143,6 +193,9 @@
 .navCta:hover {
   border-color: var(--accent);
   background: var(--accent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent-contrast) 30%, transparent),
+    0 10px 22px -14px color-mix(in srgb, var(--accent) 45%, transparent);
   color: var(--accent-contrast);
 }
 
@@ -152,6 +205,18 @@
   position: relative;
   overflow: hidden;
   border-bottom: 1px solid var(--line);
+  /* 极轻的顶部/左侧银绿 ambient，位于 canvas 之下、不遮挡 WebGL */
+  background:
+    radial-gradient(
+      54rem 30rem at 10% -10%,
+      color-mix(in srgb, var(--accent) 8%, transparent),
+      transparent 60%
+    ),
+    linear-gradient(
+      118deg,
+      color-mix(in srgb, var(--surface-raised) 26%, transparent) 0%,
+      transparent 46%
+    );
 }
 
 .heroCanvas {
@@ -291,22 +356,32 @@
     transform 160ms ease,
     background-color 160ms ease,
     border-color 160ms ease,
+    box-shadow 160ms ease,
     color 160ms ease;
 }
 
 .primaryBtn {
   border: 1px solid var(--accent);
   background: var(--accent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent-contrast) 28%, transparent),
+    0 12px 26px -14px color-mix(in srgb, var(--accent) 52%, transparent);
   color: var(--accent-contrast);
 }
 
 .primaryBtn:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent-contrast) 32%, transparent),
+    0 16px 30px -14px color-mix(in srgb, var(--accent) 58%, transparent);
   transform: translateY(-1px);
 }
 
 .primaryBtn:active {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent-contrast) 22%, transparent),
+    0 8px 18px -14px color-mix(in srgb, var(--accent) 48%, transparent);
   transform: translateY(0);
 }
 
@@ -322,6 +397,9 @@
 .ghostBtn {
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--surface-raised) 82%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 55%, transparent),
+    0 10px 22px -18px color-mix(in srgb, var(--foreground) 26%, transparent);
   color: var(--foreground);
 }
 
@@ -335,7 +413,12 @@
 
 .proofRail {
   border-bottom: 1px solid var(--line);
-  background: var(--surface);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-raised) 30%, var(--surface)) 0%,
+    var(--surface) 100%
+  );
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 45%, transparent);
 }
 
 .proofList {
@@ -469,7 +552,14 @@
 
 .workflowSection {
   border-block: 1px solid var(--line);
-  background: var(--surface);
+  /* 同族 surface 上的轻方向渐变 + 顶部内高光，建立深度 */
+  background: linear-gradient(
+    152deg,
+    color-mix(in srgb, var(--surface-raised) 26%, var(--surface)) 0%,
+    var(--surface) 44%,
+    color-mix(in srgb, var(--background) 52%, var(--surface)) 100%
+  );
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 42%, transparent);
   scroll-margin-top: 4.25rem;
 }
 
@@ -546,6 +636,12 @@
   gap: 1.4rem;
   max-width: 92rem;
   margin: 0 auto;
+  /* 顶部居中银绿环境光，收束视线到 CTA */
+  background: radial-gradient(
+    52rem 24rem at 50% -12%,
+    color-mix(in srgb, var(--accent) 7%, transparent),
+    transparent 66%
+  );
   padding: 8.5rem 1.5rem;
   text-align: center;
 }
@@ -574,6 +670,8 @@
   gap: 1rem;
   margin: 0 auto;
   border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 64%, var(--background));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 38%, transparent);
   padding: 1.2rem 1.5rem;
   color: var(--muted);
   font-size: 0.88rem;
@@ -605,6 +703,18 @@
 }
 
 /* ---------- 可访问性 ---------- */
+
+@media (prefers-reduced-transparency: reduce) {
+  .nav {
+    background: var(--background);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .ghostBtn {
+    background: var(--surface-raised);
+  }
+}
 
 .shell a:focus-visible {
   border-radius: 0.35rem;

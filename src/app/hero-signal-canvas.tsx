@@ -122,9 +122,8 @@ export function HeroSignalCanvas() {
         camera.position.set(0, 0.1, 6.2);
 
         const accent = new THREE.Color(
-          getComputedStyle(document.documentElement)
-            .getPropertyValue("--accent")
-            .trim() || "#166c56",
+          getComputedStyle(canvas).getPropertyValue("--accent").trim() ||
+            "#15705a",
         );
 
         const root = new THREE.Group();
@@ -142,7 +141,7 @@ export function HeroSignalCanvas() {
           size: 0.055,
           sizeAttenuation: true,
           transparent: true,
-          opacity: 0.92,
+          opacity: 0.97,
         });
         root.add(new THREE.Points(factGeometry, factMaterial));
 
@@ -158,7 +157,7 @@ export function HeroSignalCanvas() {
           size: 0.05,
           sizeAttenuation: true,
           transparent: true,
-          opacity: 0.85,
+          opacity: 0.93,
         });
         root.add(new THREE.Points(signalGeometry, signalMaterial));
 
@@ -166,7 +165,7 @@ export function HeroSignalCanvas() {
         const ringMaterial = new THREE.MeshBasicMaterial({
           color: accent,
           transparent: true,
-          opacity: 0.4,
+          opacity: 0.55,
           side: THREE.DoubleSide,
         });
         const rings: InstanceType<ThreeModule["Mesh"]>[] = [];
@@ -194,7 +193,7 @@ export function HeroSignalCanvas() {
         const lineMaterial = new THREE.LineBasicMaterial({
           color: accent,
           transparent: true,
-          opacity: 0.13,
+          opacity: 0.2,
         });
         root.add(new THREE.LineSegments(lineGeometry, lineMaterial));
 
@@ -210,7 +209,7 @@ export function HeroSignalCanvas() {
           size: 0.075,
           sizeAttenuation: true,
           transparent: true,
-          opacity: 0.95,
+          opacity: 1,
         });
         root.add(new THREE.Points(pulseGeometry, pulseMaterial));
 
@@ -284,8 +283,8 @@ export function HeroSignalCanvas() {
           positionAttribute.needsUpdate = true;
 
           lineMaterial.opacity =
-            0.1 + 0.05 * (0.5 + 0.5 * Math.sin(now * 0.0006));
-          pulseMaterial.opacity = 0.7 + 0.25 * Math.sin(now * 0.0011);
+            0.16 + 0.07 * (0.5 + 0.5 * Math.sin(now * 0.0006));
+          pulseMaterial.opacity = 0.8 + 0.2 * Math.sin(now * 0.0011);
 
           renderer.render(scene, camera);
         };
