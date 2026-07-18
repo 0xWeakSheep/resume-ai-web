@@ -1,0 +1,718 @@
+/* Resume AI 首页 · 编辑感品牌视觉（仅 src/app/page.tsx 引用） */
+
+.shell {
+  min-height: 100dvh;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.skipLink {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 50;
+  transform: translateY(-300%);
+  border: 1px solid var(--accent);
+  border-radius: 0.5rem;
+  background: var(--surface-raised);
+  color: var(--accent);
+  padding: 0.6rem 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform 160ms ease;
+}
+
+.skipLink:focus-visible {
+  transform: translateY(0);
+}
+
+/* ---------- 导航 ---------- */
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  background: color-mix(in srgb, var(--background) 86%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.navInner {
+  display: flex;
+  max-width: 92rem;
+  min-height: 4.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--foreground);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+}
+
+.brandMark {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.navLinks {
+  display: flex;
+  align-items: center;
+  gap: 1.6rem;
+  font-size: 0.92rem;
+}
+
+.navLink {
+  position: relative;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 140ms ease;
+}
+
+.navLink::after {
+  position: absolute;
+  right: 0;
+  bottom: -0.3rem;
+  left: 0;
+  height: 1px;
+  content: "";
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 180ms ease;
+}
+
+.navLink:hover {
+  color: var(--foreground);
+}
+
+.navLink:hover::after {
+  transform: scaleX(1);
+}
+
+.navCta {
+  display: inline-flex;
+  min-height: 2.4rem;
+  align-items: center;
+  border: 1px solid var(--foreground);
+  border-radius: 999px;
+  color: var(--foreground);
+  padding: 0 1.05rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
+}
+
+.navCta:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+/* ---------- 首屏 ---------- */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+}
+
+.heroCanvas {
+  position: absolute;
+  inset: 0;
+}
+
+.heroCanvas canvas {
+  display: block;
+}
+
+.canvasLegend {
+  position: absolute;
+  right: 1.5rem;
+  bottom: 1.25rem;
+  display: flex;
+  gap: 1.4rem;
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.canvasLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.canvasLegend i {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+}
+
+.legendFact {
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.legendSignal {
+  border: 1.5px solid var(--accent);
+  border-radius: 999px;
+  background: transparent;
+}
+
+.legendMatch {
+  height: 1.5px !important;
+  background: var(--accent);
+  opacity: 0.55;
+}
+
+.heroVeil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--background) 97%, transparent) 0%,
+    color-mix(in srgb, var(--background) 88%, transparent) 46%,
+    color-mix(in srgb, var(--background) 22%, transparent) 100%
+  );
+  pointer-events: none;
+}
+
+.heroInner {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  max-width: 92rem;
+  min-height: calc(100dvh - 4.25rem);
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.heroContent {
+  align-self: center;
+  padding: 6rem 0 7rem;
+}
+
+.heroLabel {
+  margin: 0;
+  color: var(--accent);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.heroTitle {
+  max-width: 14ch;
+  margin: 1.1rem 0 0;
+  font-size: clamp(2.6rem, 5.4vw, 4.9rem);
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.08;
+}
+
+.heroTitleAccent {
+  color: var(--accent);
+}
+
+.heroLede {
+  max-width: 30rem;
+  margin: 1.6rem 0 0;
+  color: var(--muted);
+  font-size: 1.08rem;
+  line-height: 1.85;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin-top: 2.4rem;
+}
+
+.primaryBtn,
+.ghostBtn {
+  display: inline-flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  border-radius: 999px;
+  padding: 0 1.5rem;
+  font-weight: 750;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.primaryBtn {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.primaryBtn:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.primaryBtn:active {
+  transform: translateY(0);
+}
+
+.btnArrow {
+  display: inline-block;
+  transition: transform 160ms ease;
+}
+
+.primaryBtn:hover .btnArrow {
+  transform: translateX(3px);
+}
+
+.ghostBtn {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-raised) 82%, transparent);
+  color: var(--foreground);
+}
+
+.ghostBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.trustRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.6rem;
+  margin: 2.6rem 0 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  list-style: none;
+}
+
+.trustItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.trustItem::before {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  content: "";
+  background: var(--accent);
+}
+
+/* ---------- 通用章节 ---------- */
+
+.sectionHead {
+  display: grid;
+  align-content: start;
+  gap: 1.2rem;
+}
+
+.sectionIndex {
+  margin: 0;
+  color: var(--accent);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: clamp(2rem, 3.6vw, 3.1rem);
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.12;
+}
+
+.sectionLede {
+  max-width: 26rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.85;
+}
+
+/* ---------- 原理：编辑感编号列表 ---------- */
+
+.principleSection {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 4rem;
+  max-width: 92rem;
+  margin: 0 auto;
+  padding: 8rem 1.5rem;
+  scroll-margin-top: 4.25rem;
+}
+
+.principleSection .sectionHead {
+  position: sticky;
+  top: 8rem;
+}
+
+.principleList {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+
+.principleItem {
+  display: grid;
+  grid-template-columns: 3.4rem minmax(0, 1fr);
+  gap: 1.4rem;
+  border-bottom: 1px solid var(--line);
+  padding: 1.8rem 0.75rem;
+  transition:
+    background-color 180ms ease,
+    padding-left 180ms ease;
+}
+
+.principleItem:hover {
+  background: color-mix(in srgb, var(--accent-soft) 34%, transparent);
+  padding-left: 1.15rem;
+}
+
+.principleNo {
+  color: var(--accent);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.9;
+}
+
+.principleBody h3 {
+  margin: 0;
+  font-size: 1.28rem;
+  font-weight: 700;
+}
+
+.principleBody p {
+  max-width: 32rem;
+  margin: 0.6rem 0 0;
+  color: var(--muted);
+  line-height: 1.8;
+}
+
+/* ---------- 流程：非对称双栏 ---------- */
+
+.workflowSection {
+  border-block: 1px solid var(--line);
+  background: var(--surface);
+  scroll-margin-top: 4.25rem;
+}
+
+.workflowInner {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: 4rem;
+  max-width: 92rem;
+  margin: 0 auto;
+  padding: 8rem 1.5rem;
+}
+
+.workflowInner .primaryBtn {
+  justify-self: start;
+  margin-top: 0.6rem;
+}
+
+.stepList {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.stepItem {
+  display: grid;
+  grid-template-columns: 5.2rem minmax(0, 1fr);
+  gap: 1.2rem;
+  border-bottom: 1px solid var(--line);
+  padding: 1.5rem 0;
+  transition: padding-left 180ms ease;
+}
+
+.stepItem:hover {
+  padding-left: 0.5rem;
+}
+
+.stepNo {
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.9;
+}
+
+.stepItem h3 {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 700;
+}
+
+.stepItem p {
+  margin: 0.45rem 0 0;
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+/* ---------- 收尾 CTA ---------- */
+
+.closingSection {
+  display: grid;
+  justify-items: center;
+  gap: 1.4rem;
+  max-width: 92rem;
+  margin: 0 auto;
+  padding: 8.5rem 1.5rem;
+  text-align: center;
+}
+
+.closingTitle {
+  max-width: 18ch;
+  margin: 0;
+  font-size: clamp(2.1rem, 4.4vw, 3.6rem);
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.closingSection .primaryBtn {
+  margin-top: 0.8rem;
+}
+
+/* ---------- 页脚 ---------- */
+
+.footer {
+  display: flex;
+  max-width: 92rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 auto;
+  border-top: 1px solid var(--line);
+  padding: 1.6rem 1.5rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.footerBrand {
+  color: var(--foreground);
+  font-weight: 800;
+}
+
+.footerLink {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.footerLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+
+/* ---------- 可访问性 ---------- */
+
+.shell a:focus-visible {
+  border-radius: 0.35rem;
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* ---------- 入场与动效 ---------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  .heroContent > * {
+    animation: hero-rise 700ms cubic-bezier(0.22, 0.8, 0.3, 1) both;
+  }
+
+  .heroContent > *:nth-child(2) {
+    animation-delay: 90ms;
+  }
+
+  .heroContent > *:nth-child(3) {
+    animation-delay: 180ms;
+  }
+
+  .heroContent > *:nth-child(4) {
+    animation-delay: 260ms;
+  }
+
+  .heroContent > *:nth-child(5) {
+    animation-delay: 340ms;
+  }
+
+  .canvasLegend {
+    animation: hero-fade 900ms ease 420ms both;
+  }
+}
+
+@keyframes hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes hero-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skipLink,
+  .navLink,
+  .navLink::after,
+  .navCta,
+  .primaryBtn,
+  .ghostBtn,
+  .btnArrow,
+  .principleItem,
+  .stepItem {
+    transition: none;
+  }
+}
+
+/* ---------- 响应式 ---------- */
+
+@media (max-width: 980px) {
+  .heroInner {
+    grid-template-columns: 1fr;
+    min-height: calc(88dvh - 4.25rem);
+  }
+
+  .heroContent {
+    max-width: 40rem;
+    padding: 5rem 0 6rem;
+  }
+
+  .principleSection,
+  .workflowInner {
+    grid-template-columns: 1fr;
+    gap: 3rem;
+    padding-block: 6rem;
+  }
+
+  .principleSection .sectionHead {
+    position: static;
+  }
+
+  .canvasLegend {
+    right: 1rem;
+    bottom: 1rem;
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .navInner {
+    min-height: 3.8rem;
+    padding-inline: 1rem;
+  }
+
+  .navLinks {
+    gap: 1.1rem;
+    font-size: 0.88rem;
+  }
+
+  .navCta {
+    min-height: 2.2rem;
+    padding-inline: 0.85rem;
+  }
+
+  .heroInner,
+  .principleSection,
+  .workflowInner,
+  .closingSection {
+    padding-inline: 1rem;
+  }
+
+  .heroContent {
+    padding: 4rem 0 9rem;
+  }
+
+  .heroTitle {
+    font-size: clamp(2.2rem, 9.4vw, 3rem);
+  }
+
+  .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .primaryBtn,
+  .ghostBtn {
+    width: 100%;
+  }
+
+  .principleItem {
+    grid-template-columns: 2.4rem minmax(0, 1fr);
+    gap: 1rem;
+    padding-inline: 0.25rem;
+  }
+
+  .stepItem {
+    grid-template-columns: 4.2rem minmax(0, 1fr);
+  }
+
+  .canvasLegend {
+    font-size: 0.66rem;
+  }
+
+  .footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding-inline: 1rem;
+  }
+}
+
+@media (min-width: 1800px) {
+  .navInner,
+  .heroInner,
+  .principleSection,
+  .workflowInner,
+  .closingSection,
+  .footer {
+    max-width: 104rem;
+  }
+}
