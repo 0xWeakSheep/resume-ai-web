@@ -14,6 +14,7 @@ type ExportState = "idle" | "docx" | "pdf";
 type ActivePanel = "analysis" | "review" | "quality";
 type JobSourceStatus = "ready" | "failed" | "duplicate";
 type JobFilterStatus = "pass" | "review" | "blocked";
+type RewriteDecision = "accepted" | "rejected";
 type CareerFactCategory =
   | "profile"
   | "experience"
@@ -129,6 +130,9 @@ interface RewriteSuggestion {
   reason: string;
   evidence: string;
   sourceFactIds?: string[];
+  riskLevel?: "low" | "medium" | "high";
+  riskReasons?: string[];
+  acceptedByDefault?: boolean;
 }
 
 interface SourceFactReference {
@@ -276,6 +280,27 @@ const hardRequirementStatusLabel: Record<HardRequirementMatch["status"], string>
     partial: "部分满足",
     missing: "未满足",
   };
+
+const rewriteRiskLabel: Record<NonNullable<RewriteSuggestion["riskLevel"]>, string> =
+  {
+    low: "低风险",
+    medium: "需复核",
+    high: "高风险",
+  };
+
+const rewriteRiskClassName: Record<
+  NonNullable<RewriteSuggestion["riskLevel"]>,
+  string
+> = {
+  low: "status-pill matched",
+  medium: "status-pill partial",
+  high: "status-pill missing",
+};
+
+const rewriteDecisionLabel: Record<RewriteDecision, string> = {
+  accepted: "已纳入最终稿",
+  rejected: "已从最终稿排除",
+};
 
 const factCategoryOrder: CareerFactCategory[] = [
   "profile",
@@ -445,6 +470,66 @@ function buildPrintDocument(markdown: string) {
 </html>`;
 }
 
+function getSuggestionKey(suggestion: RewriteSuggestion, index: number) {
+  return `${index}-${suggestion.before.slice(0, 24)}`;
+}
+
+function buildInitialSuggestionDecisions(
+  suggestions: RewriteSuggestion[],
+): Record<string, RewriteDecision> {
+  return Object.fromEntries(
+    suggestions.map((suggestion, index) => [
+      getSuggestionKey(suggestion, index),
+      suggestion.acceptedByDefault === false ? "rejected" : "accepted",
+    ]),
+  );
+}
+
+function buildInitialSuggestionEdits(
+  suggestions: RewriteSuggestion[],
+): Record<string, string> {
+  return Object.fromEntries(
+    suggestions.map((suggestion, index) => [
+      getSuggestionKey(suggestion, index),
+      suggestion.after,
+    ]),
+  );
+}
+
+function buildDraftFromSuggestions(
+  payload: CustomizeResponse,
+  decisions: Record<string, RewriteDecision>,
+  edits: Record<string, string>,
+) {
+  const acceptedBullets = payload.rewrite.rewrittenExperienceBullets
+    .map((suggestion, index) => {
+      const key = getSuggestionKey(suggestion, index);
+
+      if (decisions[key] === "rejected") {
+        return null;
+      }
+
+      const edited = edits[key] ?? suggestion.after;
+      return edited.trim() ? `- ${edited.trim()}` : null;
+    })
+    .filter((line): line is string => Boolean(line));
+  const nextBulletSection =
+    acceptedBullets.length > 0
+      ? acceptedBullets.join("\n")
+      : "- 暂无已接受改写，请先接受或编辑至少一条修改。";
+  const sectionPattern =
+    /## 重点经历改写\n[\s\S]*?\n\n## 建议强调技能/;
+
+  if (!sectionPattern.test(payload.rewrite.finalResumeMarkdown)) {
+    return `${payload.rewrite.finalResumeMarkdown}\n\n## 已接受改写\n${nextBulletSection}\n`;
+  }
+
+  return payload.rewrite.finalResumeMarkdown.replace(
+    sectionPattern,
+    `## 重点经历改写\n${nextBulletSection}\n\n## 建议强调技能`,
+  );
+}
+
 export function ResumeWorkbench() {
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -469,6 +554,12 @@ export function ResumeWorkbench() {
     null,
   );
   const [editableDraft, setEditableDraft] = useState("");
+  const [suggestionDecisions, setSuggestionDecisions] = useState<
+    Record<string, RewriteDecision>
+  >({});
+  const [suggestionEdits, setSuggestionEdits] = useState<Record<string, string>>(
+    {},
+  );
   const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
 
   const coveragePercent = result
@@ -498,6 +589,8 @@ export function ResumeWorkbench() {
   function resetGeneratedResume() {
     setResult(null);
     setEditableDraft("");
+    setSuggestionDecisions({});
+    setSuggestionEdits({});
     setConfirmedAt(null);
     setActivePanel("analysis");
     setRequestState("idle");
@@ -679,8 +772,18 @@ export function ResumeWorkbench() {
       }
 
       const payload = (await response.json()) as CustomizeResponse;
+      const initialDecisions = buildInitialSuggestionDecisions(
+        payload.rewrite.rewrittenExperienceBullets,
+      );
+      const initialEdits = buildInitialSuggestionEdits(
+        payload.rewrite.rewrittenExperienceBullets,
+      );
       setResult(payload);
-      setEditableDraft(payload.rewrite.finalResumeMarkdown);
+      setSuggestionDecisions(initialDecisions);
+      setSuggestionEdits(initialEdits);
+      setEditableDraft(
+        buildDraftFromSuggestions(payload, initialDecisions, initialEdits),
+      );
       setConfirmedAt(null);
       setActivePanel("analysis");
       setRequestState("success");
@@ -703,6 +806,8 @@ export function ResumeWorkbench() {
     setSelectedJob(null);
     setResult(null);
     setEditableDraft("");
+    setSuggestionDecisions({});
+    setSuggestionEdits({});
     setConfirmedAt(null);
     setActivePanel("analysis");
     setErrorMessage("");
@@ -756,12 +861,65 @@ export function ResumeWorkbench() {
     setErrorMessage("");
   }
 
+  function applySuggestionState(
+    nextDecisions: Record<string, RewriteDecision>,
+    nextEdits: Record<string, string>,
+  ) {
+    setSuggestionDecisions(nextDecisions);
+    setSuggestionEdits(nextEdits);
+    setConfirmedAt(null);
+
+    if (result) {
+      setEditableDraft(buildDraftFromSuggestions(result, nextDecisions, nextEdits));
+    }
+  }
+
+  function handleSuggestionDecision(
+    suggestion: RewriteSuggestion,
+    index: number,
+    decision: RewriteDecision,
+  ) {
+    const key = getSuggestionKey(suggestion, index);
+    const nextDecisions = {
+      ...suggestionDecisions,
+      [key]: decision,
+    };
+
+    applySuggestionState(nextDecisions, suggestionEdits);
+    setStatusMessage(rewriteDecisionLabel[decision]);
+  }
+
+  function handleSuggestionEdit(
+    suggestion: RewriteSuggestion,
+    index: number,
+    value: string,
+  ) {
+    const key = getSuggestionKey(suggestion, index);
+    const nextDecisions = {
+      ...suggestionDecisions,
+      [key]: "accepted" as RewriteDecision,
+    };
+    const nextEdits = {
+      ...suggestionEdits,
+      [key]: value,
+    };
+
+    applySuggestionState(nextDecisions, nextEdits);
+  }
+
   function handleResetDraft() {
     if (!result) {
       return;
     }
 
-    setEditableDraft(result.rewrite.finalResumeMarkdown);
+    const nextDecisions = buildInitialSuggestionDecisions(
+      result.rewrite.rewrittenExperienceBullets,
+    );
+    const nextEdits = buildInitialSuggestionEdits(
+      result.rewrite.rewrittenExperienceBullets,
+    );
+
+    applySuggestionState(nextDecisions, nextEdits);
     setConfirmedAt(null);
     setStatusMessage("已恢复 AI 草稿。");
   }
@@ -894,6 +1052,8 @@ export function ResumeWorkbench() {
                 setSelectedJob(null);
                 setResult(null);
                 setEditableDraft("");
+                setSuggestionDecisions({});
+                setSuggestionEdits({});
                 setConfirmedAt(null);
                 setActivePanel("analysis");
                 setStatusMessage("");
@@ -1486,31 +1646,101 @@ export function ResumeWorkbench() {
                     </div>
                     <div className="comparison-list">
                       {result.rewrite.rewrittenExperienceBullets.map(
-                        (suggestion) => (
-                          <article
-                            className="comparison-card"
-                            key={suggestion.after}
-                          >
-                            <div>
-                              <span>原文证据</span>
-                              <p>{suggestion.before}</p>
-                            </div>
-                            <div>
-                              <span>改写结果</span>
-                              <p>{suggestion.after}</p>
-                            </div>
-                            <div>
-                              <span>修改理由</span>
-                              <p>{suggestion.reason}</p>
-                              {suggestion.sourceFactIds?.length ? (
-                                <small>
-                                  引用事实：
-                                  {suggestion.sourceFactIds.join("、")}
-                                </small>
-                              ) : null}
-                            </div>
-                          </article>
-                        ),
+                        (suggestion, index) => {
+                          const key = getSuggestionKey(suggestion, index);
+                          const decision =
+                            suggestionDecisions[key] ??
+                            (suggestion.acceptedByDefault === false
+                              ? "rejected"
+                              : "accepted");
+                          const editedAfter =
+                            suggestionEdits[key] ?? suggestion.after;
+
+                          return (
+                            <article className="comparison-card" key={key}>
+                              <div>
+                                <span>原文证据</span>
+                                <p>{suggestion.before}</p>
+                              </div>
+                              <div>
+                                <span>改写结果</span>
+                                <textarea
+                                  className="inline-suggestion-editor"
+                                  onChange={(event) =>
+                                    handleSuggestionEdit(
+                                      suggestion,
+                                      index,
+                                      event.target.value,
+                                    )
+                                  }
+                                  rows={5}
+                                  value={editedAfter}
+                                />
+                              </div>
+                              <div>
+                                <div className="comparison-meta-row">
+                                  <span>修改理由</span>
+                                  {suggestion.riskLevel ? (
+                                    <span
+                                      className={
+                                        rewriteRiskClassName[
+                                          suggestion.riskLevel
+                                        ]
+                                      }
+                                    >
+                                      {rewriteRiskLabel[suggestion.riskLevel]}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <p>{suggestion.reason}</p>
+                                {suggestion.riskReasons?.length ? (
+                                  <ul className="risk-reason-list">
+                                    {suggestion.riskReasons.map((reason) => (
+                                      <li key={`${key}-${reason}`}>{reason}</li>
+                                    ))}
+                                  </ul>
+                                ) : null}
+                                {suggestion.sourceFactIds?.length ? (
+                                  <small>
+                                    引用事实：
+                                    {suggestion.sourceFactIds.join("、")}
+                                  </small>
+                                ) : null}
+                                <div className="suggestion-actions">
+                                  <span>{rewriteDecisionLabel[decision]}</span>
+                                  <button
+                                    className="ghost-button"
+                                    disabled={decision === "accepted"}
+                                    onClick={() =>
+                                      handleSuggestionDecision(
+                                        suggestion,
+                                        index,
+                                        "accepted",
+                                      )
+                                    }
+                                    type="button"
+                                  >
+                                    接受此条
+                                  </button>
+                                  <button
+                                    className="ghost-button"
+                                    disabled={decision === "rejected"}
+                                    onClick={() =>
+                                      handleSuggestionDecision(
+                                        suggestion,
+                                        index,
+                                        "rejected",
+                                      )
+                                    }
+                                    type="button"
+                                  >
+                                    拒绝此条
+                                  </button>
+                                </div>
+                              </div>
+                            </article>
+                          );
+                        },
                       )}
                     </div>
                   </div>
