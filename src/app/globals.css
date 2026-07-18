@@ -526,6 +526,12 @@ textarea {
   color: var(--accent);
 }
 
+.action-checklist span.optional {
+  border: 1px dashed color-mix(in srgb, var(--info) 42%, var(--line));
+  background: color-mix(in srgb, var(--info-soft) 38%, transparent);
+  color: var(--info);
+}
+
 .action-bar-buttons {
   display: flex;
   flex-wrap: wrap;
@@ -894,6 +900,10 @@ textarea {
   background: color-mix(in srgb, var(--accent-soft) 22%, var(--surface-raised));
 }
 
+.role-card {
+  border-color: color-mix(in srgb, var(--info) 28%, var(--line));
+}
+
 .job-card-head {
   display: flex;
   align-items: flex-start;
@@ -977,6 +987,89 @@ textarea {
   padding: 0.5rem 0.6rem;
   font-size: 0.82rem;
   line-height: 1.45;
+}
+
+.role-score-row {
+  display: grid;
+  grid-template-columns: 6rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.role-score-row span {
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.role-score-row progress {
+  width: 100%;
+  height: 0.45rem;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.role-score-row progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.role-score-row progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--info), var(--accent));
+}
+
+.role-score-row progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--info), var(--accent));
+}
+
+.role-description,
+.role-reason {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.role-description {
+  color: var(--foreground);
+}
+
+.role-reason {
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--info-soft) 62%, transparent);
+  color: var(--info);
+  padding: 0.6rem;
+  font-size: 0.84rem;
+}
+
+.role-fact-list,
+.role-gap-list {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.role-fact-list span,
+.role-gap-list span {
+  border-radius: 0.45rem;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.role-fact-list span {
+  overflow: hidden;
+  background: color-mix(in srgb, var(--accent-soft) 68%, transparent);
+  color: var(--accent);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-gap-list span {
+  background: color-mix(in srgb, var(--warning-soft) 64%, transparent);
+  color: var(--warning);
 }
 
 .hard-requirement-list span {
@@ -1712,6 +1805,65 @@ textarea {
   color: var(--muted);
   font-size: 0.82rem;
   line-height: 1.45;
+}
+
+.role-discovery-panel {
+  display: grid;
+  gap: 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--info) 32%, var(--line));
+  border-radius: 0.5rem;
+  background:
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--info-soft) 58%, transparent),
+      transparent 48%
+    ),
+    var(--surface-raised);
+  padding: 1rem;
+}
+
+.role-discovery-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.role-discovery-list article {
+  display: grid;
+  gap: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--line) 76%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  padding: 0.8rem;
+}
+
+.role-discovery-list div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.role-discovery-list strong {
+  font-size: 0.98rem;
+  line-height: 1.25;
+}
+
+.role-discovery-list span {
+  color: var(--info);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 1.25rem;
+  font-weight: 850;
+}
+
+.role-discovery-list p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.role-discovery-list .text-button {
+  justify-self: start;
 }
 
 .preview-metric-grid {

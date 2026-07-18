@@ -55,6 +55,30 @@ interface FactResponse {
   };
 }
 
+type RoleRecommendationLevel = "strong" | "possible" | "weak";
+
+interface RoleRecommendation {
+  id: string;
+  roleTitle: string;
+  roleDescription: string;
+  relevanceScore: number;
+  level: RoleRecommendationLevel;
+  matchedKeywords: string[];
+  matchedFacts: SourceFactReference[];
+  gaps: string[];
+  reason: string;
+}
+
+interface RoleRecommendationResponse extends FactResponse {
+  recommendations: RoleRecommendation[];
+  summary: {
+    total: number;
+    strong: number;
+    possible: number;
+    weak: number;
+  };
+}
+
 interface StandardizedRequirement {
   id: string;
   text: string;
@@ -297,6 +321,19 @@ const jobFilterClassName: Record<JobFilterStatus, string> = {
   review: "status-pill partial",
   blocked: "status-pill missing",
 };
+
+const roleRecommendationLevelLabel: Record<RoleRecommendationLevel, string> = {
+  strong: "强匹配",
+  possible: "可尝试",
+  weak: "需补充",
+};
+
+const roleRecommendationLevelClassName: Record<RoleRecommendationLevel, string> =
+  {
+    strong: "status-pill matched",
+    possible: "status-pill partial",
+    weak: "status-pill missing",
+  };
 
 const hardRequirementStatusLabel: Record<HardRequirementMatch["status"], string> =
   {
@@ -610,6 +647,24 @@ function findBestReadyJob(payload: JobStandardizeResponse) {
   return bestJob;
 }
 
+function buildRoleDirectionJobDescription(recommendation: RoleRecommendation) {
+  const keywords = recommendation.matchedKeywords.length
+    ? recommendation.matchedKeywords.join("、")
+    : "待补充";
+  const gaps = recommendation.gaps
+    .map((gap, index) => `${index + 1}. ${gap}`)
+    .join("\n");
+
+  return `岗位：${recommendation.roleTitle}（方向版，非具体 JD）
+方向说明：${recommendation.roleDescription}
+匹配关键词：${keywords}
+相关性：${recommendation.relevanceScore} / 100（${roleRecommendationLevelLabel[recommendation.level]}）
+匹配依据：${recommendation.reason}
+
+补充建议：
+${gaps || "1. 补充更多真实项目、职责边界和量化结果。"}`;
+}
+
 function readStoredVersionRecords(): ResumeVersionRecord[] {
   if (typeof window === "undefined") {
     return [];
@@ -650,6 +705,7 @@ export function ResumeWorkbench() {
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [factState, setFactState] = useState<RequestState>("idle");
   const [jobState, setJobState] = useState<RequestState>("idle");
+  const [roleState, setRoleState] = useState<RequestState>("idle");
   const [exportState, setExportState] = useState<ExportState>("idle");
   const [activePanel, setActivePanel] = useState<ActivePanel>("analysis");
   const [errorMessage, setErrorMessage] = useState("");
@@ -659,6 +715,8 @@ export function ResumeWorkbench() {
   const [jobResponse, setJobResponse] = useState<JobStandardizeResponse | null>(
     null,
   );
+  const [roleResponse, setRoleResponse] =
+    useState<RoleRecommendationResponse | null>(null);
   const [selectedJob, setSelectedJob] = useState<SelectedJobContext | null>(
     null,
   );
@@ -703,20 +761,25 @@ export function ResumeWorkbench() {
     jobSources.jobDescriptions.length + jobSources.jobUrls.length;
   const hasSelectedJobDescription = Boolean(jobDescription.trim());
   const hasJobMaterial = hasJobSources || hasSelectedJobDescription;
+  const hasRoleRecommendations = Boolean(roleResponse?.recommendations.length);
+  const isDirectionTarget = selectedJob?.id.startsWith("ROLE-") ?? false;
+  const readinessItems = hasJobMaterial
+    ? [
+        hasResumeMaterial,
+        hasJobMaterial,
+        Boolean(factResponse),
+        Boolean(jobResponse) || hasSelectedJobDescription,
+      ]
+    : [hasResumeMaterial, Boolean(factResponse), hasRoleRecommendations];
   const readinessPercent = Math.round(
-    ([
-      hasResumeMaterial,
-      hasJobMaterial,
-      Boolean(factResponse),
-      Boolean(jobResponse) || hasSelectedJobDescription,
-    ].filter(Boolean).length /
-      4) *
+    (readinessItems.filter(Boolean).length / readinessItems.length) *
       100,
   );
   const isPrimaryBusy =
     requestState === "loading" ||
     factState === "loading" ||
-    jobState === "loading";
+    jobState === "loading" ||
+    roleState === "loading";
   const isAnalysisReady =
     Boolean(factResponse) &&
     hasJobMaterial &&
@@ -724,31 +787,50 @@ export function ResumeWorkbench() {
   const primaryActionLabel =
     requestState === "loading"
       ? "生成中..."
+      : roleState === "loading"
+        ? "推荐中..."
       : factState === "loading" || jobState === "loading"
         ? "分析中..."
         : !hasResumeMaterial
           ? "先添加简历材料"
           : !hasJobMaterial
-            ? "先添加 JD"
+            ? hasRoleRecommendations
+              ? "重新推荐岗位方向"
+              : "推荐适合的岗位方向"
             : isAnalysisReady
           ? selectedJob
-            ? "生成高优先级定制简历"
+            ? isDirectionTarget
+              ? "生成方向版简历"
+              : "生成高优先级定制简历"
             : "生成定制简历"
           : "分析材料与 JD";
-  const canUsePrimaryAction =
-    hasResumeMaterial && hasJobMaterial && !isPrimaryBusy;
-  const primaryActionPhase = isAnalysisReady ? "Generate" : "Analyze";
-  const primaryActionTitle = isAnalysisReady
-    ? selectedJob
-      ? `生成 ${selectedJob.roleTitle} 定制版本`
-      : "生成已分析 JD 的定制版本"
-    : "先分析材料与 JD";
+  const canUsePrimaryAction = hasResumeMaterial && !isPrimaryBusy;
+  const primaryActionPhase = !hasResumeMaterial
+    ? "Input"
+    : !hasJobMaterial
+      ? "Discover"
+      : isAnalysisReady
+        ? "Generate"
+        : "Analyze";
+  const primaryActionTitle = !hasResumeMaterial
+    ? "先补充简历材料"
+    : !hasJobMaterial
+      ? "不知道投什么？先反向匹配岗位方向"
+      : isAnalysisReady
+        ? selectedJob
+          ? isDirectionTarget
+            ? `生成 ${selectedJob.roleTitle} 简历`
+            : `生成 ${selectedJob.roleTitle} 定制版本`
+          : "生成已分析 JD 的定制版本"
+        : "先分析材料与 JD";
   const primaryActionHelper = !hasResumeMaterial
     ? "先上传 PDF / DOCX / TXT，或填写简历文本。"
     : !hasJobMaterial
-      ? "在 JD 输入区粘贴岗位链接或整段 JD 文本。"
+      ? "JD 可以不填；只上传简历也能先推荐岗位方向、相关性和缺口。"
       : isAnalysisReady
-        ? "材料、事实库和 JD 已就绪，下一步会生成可审核的简历草稿。"
+        ? isDirectionTarget
+          ? "岗位方向和事实库已就绪，下一步会生成可审核的方向版简历。"
+          : "材料、事实库和 JD 已就绪，下一步会生成可审核的简历草稿。"
         : "会同时抽取职业事实库、标准化 JD，并自动选择优先岗位。";
   const readabilityPercent = result
     ? Math.max(0, Math.min(100, result.quality.readability.score))
@@ -784,8 +866,10 @@ export function ResumeWorkbench() {
       detail: hasJobSources
         ? `${jdSourceCount} 个 JD 来源待分析`
         : hasSelectedJobDescription
-          ? "已选择定制岗位"
-          : "粘贴链接或整段 JD 文本",
+          ? isDirectionTarget
+            ? "已选择岗位方向"
+            : "已选择定制岗位"
+          : "可选：不填会进入岗位方向推荐",
     },
     {
       label: "事实库",
@@ -796,25 +880,31 @@ export function ResumeWorkbench() {
     },
     {
       label: "匹配排序",
-      done: Boolean(jobResponse) || Boolean(selectedJob),
+      done: Boolean(jobResponse) || Boolean(selectedJob) || hasRoleRecommendations,
       detail: selectedJob
-        ? `当前目标：${selectedJob.roleTitle}`
+        ? `${isDirectionTarget ? "当前方向" : "当前目标"}：${selectedJob.roleTitle}`
         : jobResponse
           ? `${jobResponse.summary.ready} 个可用岗位`
-          : "批量 JD 会自动去重、过滤并排序",
+          : roleResponse
+            ? `${roleResponse.summary.total} 个岗位方向推荐`
+            : "有 JD 排序；无 JD 推荐岗位方向",
     },
     {
       label: "终稿交付",
       done: Boolean(result),
       detail: result
         ? `${acceptedSuggestionCount}/${totalSuggestionCount} 条改写已纳入`
-        : "生成后审核、保存版本并导出 PDF / DOCX",
+        : hasJobMaterial
+          ? "生成后审核、保存版本并导出 PDF / DOCX"
+          : "选择一个岗位方向后可继续生成方向版简历",
     },
   ];
   const nextStepCopy = !hasResumeMaterial
     ? "先上传简历文件；如果只有纯文本，也可以填入左侧备用文本框。"
     : !hasJobMaterial
-      ? "粘贴一个或多个 JD 链接/文本后，即可开始分析。"
+      ? roleResponse
+        ? "已基于简历推荐岗位方向。可以选择一个方向作为目标，再继续生成方向版简历。"
+        : "如果还不知道适合投什么，JD 可以先不填；点击主按钮会根据简历反向推荐岗位方向。"
       : isAnalysisReady
         ? "材料分析已完成，可以生成定制简历并进入审核导出。"
         : "点击主按钮分析材料与 JD，系统会生成事实库并选择优先岗位。";
@@ -822,6 +912,8 @@ export function ResumeWorkbench() {
   function resetFactBase() {
     setFactResponse(null);
     setFactState("idle");
+    setRoleResponse(null);
+    setRoleState("idle");
   }
 
   function resetGeneratedResume() {
@@ -990,6 +1082,66 @@ export function ResumeWorkbench() {
     }
   }
 
+  async function handleRecommendRoles() {
+    if (!apiBaseUrl) {
+      setRoleState("error");
+      setErrorMessage("缺少 NEXT_PUBLIC_API_BASE_URL，前端无法连接后端。");
+      return false;
+    }
+
+    const resumePayload = buildResumePayload(resumeText, resumeFile);
+    if (!resumePayload) {
+      setRoleState("error");
+      setErrorMessage("请先填写简历文本，或上传 PDF / DOCX / TXT 文件。");
+      return false;
+    }
+
+    setRoleState("loading");
+    setFactState("loading");
+    setStatusMessage("");
+    setErrorMessage("");
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/resume/roles/recommend`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          resume: resumePayload,
+          answers,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorBody = (await response.json().catch(() => null)) as {
+          message?: string | string[];
+        } | null;
+        const message = Array.isArray(errorBody?.message)
+          ? errorBody.message.join("；")
+          : errorBody?.message;
+        throw new Error(message || `岗位方向推荐失败：${response.status}`);
+      }
+
+      const payload = (await response.json()) as RoleRecommendationResponse;
+      setRoleResponse(payload);
+      setFactResponse(payload);
+      setRoleState("success");
+      setFactState("success");
+      setStatusMessage(
+        `已基于简历推荐 ${payload.summary.total} 个岗位方向；这一步不需要 JD。`,
+      );
+      return true;
+    } catch (error) {
+      setRoleState("error");
+      setFactState("error");
+      setErrorMessage(
+        error instanceof Error ? error.message : "岗位方向推荐失败",
+      );
+      return false;
+    }
+  }
+
   async function handleStandardizeJobs() {
     if (!apiBaseUrl) {
       setJobState("error");
@@ -1069,9 +1221,7 @@ export function ResumeWorkbench() {
     }
 
     if (!hasJobMaterial) {
-      setJobState("error");
-      setErrorMessage("请先在 JD 输入区粘贴岗位链接或整段 JD 文本。");
-      return false;
+      return handleRecommendRoles();
     }
 
     const [factsReady, jobsReady] = await Promise.all([
@@ -1106,7 +1256,7 @@ export function ResumeWorkbench() {
 
     if (!jobDescription.trim()) {
       setRequestState("error");
-      setErrorMessage("请先在 JD 输入区粘贴链接或文本，并完成分析。");
+      setErrorMessage("请先粘贴 JD，或从岗位方向推荐里选择一个方向作为目标。");
       return;
     }
 
@@ -1160,6 +1310,11 @@ export function ResumeWorkbench() {
   }
 
   async function handlePrimaryWorkflowAction() {
+    if (!hasJobMaterial) {
+      await handleRecommendRoles();
+      return;
+    }
+
     if (!isAnalysisReady) {
       await handleAnalyzeInputs();
       return;
@@ -1183,6 +1338,8 @@ export function ResumeWorkbench() {
     setFactState("idle");
     setJobResponse(null);
     setJobState("idle");
+    setRoleResponse(null);
+    setRoleState("idle");
     setSelectedJob(null);
     setResult(null);
     setEditableDraft("");
@@ -1210,6 +1367,8 @@ export function ResumeWorkbench() {
     setFactState("idle");
     setJobResponse(null);
     setJobState("idle");
+    setRoleResponse(null);
+    setRoleState("idle");
     setSelectedJob(null);
     setResult(null);
     setEditableDraft("");
@@ -1272,6 +1431,29 @@ export function ResumeWorkbench() {
         `已选择 ${job.roleTitle}${job.company ? `｜${job.company}` : ""} 作为本次定制岗位。`,
       );
     }
+    setErrorMessage("");
+  }
+
+  function handleUseRoleRecommendation(recommendation: RoleRecommendation) {
+    setJobDescription(buildRoleDirectionJobDescription(recommendation));
+    setSelectedJob({
+      id: recommendation.id,
+      roleTitle: `${recommendation.roleTitle}（方向版）`,
+      priorityRank: Number(recommendation.id.replace("ROLE-", "")) || undefined,
+      score: recommendation.relevanceScore,
+      level:
+        recommendation.level === "strong"
+          ? "high"
+          : recommendation.level === "possible"
+            ? "medium"
+            : "low",
+      filterStatus: recommendation.level === "strong" ? "pass" : "review",
+    });
+    setJobState("success");
+    resetGeneratedResume();
+    setStatusMessage(
+      `已选择「${recommendation.roleTitle}」作为方向目标；这不是具体 JD，但可以先生成方向版简历。`,
+    );
     setErrorMessage("");
   }
 
@@ -1477,10 +1659,18 @@ export function ResumeWorkbench() {
               <span>{primaryActionHelper}</span>
               <div className="action-checklist" aria-label="准备状态">
                 <span className={hasResumeMaterial ? "ready" : ""}>简历</span>
-                <span className={hasJobMaterial ? "ready" : ""}>JD</span>
+                <span className={hasJobMaterial ? "ready" : "optional"}>
+                  JD（可选）
+                </span>
                 <span className={factResponse ? "ready" : ""}>事实库</span>
-                <span className={jobResponse || selectedJob ? "ready" : ""}>
-                  匹配
+                <span
+                  className={
+                    jobResponse || selectedJob || hasRoleRecommendations
+                      ? "ready"
+                      : ""
+                  }
+                >
+                  {hasJobMaterial ? "匹配" : "方向"}
                 </span>
               </div>
             </div>
@@ -1504,7 +1694,8 @@ export function ResumeWorkbench() {
 
           {requestState === "error" ||
           factState === "error" ||
-          jobState === "error" ? (
+          jobState === "error" ||
+          roleState === "error" ? (
             <p className="error-message">{errorMessage}</p>
           ) : null}
           {statusMessage ? <p className="status-message">{statusMessage}</p> : null}
@@ -1596,7 +1787,7 @@ export function ResumeWorkbench() {
               </>
             ) : (
               <p className="fact-empty">
-                下一步点击“分析材料与 JD”，系统会先抽取简历事实，再进入匹配与改写。
+                下一步点击主按钮。没有 JD 时会先抽取事实库并推荐岗位方向；有 JD 时进入匹配与改写。
               </p>
             )}
           </section>
@@ -1607,12 +1798,12 @@ export function ResumeWorkbench() {
                 <p className="eyebrow">P0 JD Queue</p>
                 <h3>JD 输入与标准化</h3>
                 <p className="card-subcopy">
-                  支持多个 JD 文本或链接；分析后会自动选择最适合优先处理的岗位。
+                  支持多个 JD 文本或链接；如果你还不知道适合投什么，这里可以先空着。
                 </p>
                 <div className="jd-link-callout">
-                  <span>可以直接甩 JD 链接</span>
+                  <span>可以直接甩 JD 链接，也可以完全不填</span>
                   <p>
-                    多个链接逐行粘贴即可；如果是整段 JD 文本，用空行分隔。
+                    有 JD：多个链接逐行粘贴即可；无 JD：主按钮会根据简历推荐岗位方向。
                   </p>
                 </div>
               </div>
@@ -1627,7 +1818,11 @@ export function ResumeWorkbench() {
                   setJobBatchInput(event.target.value);
                   setJobResponse(null);
                   setJobState("idle");
+                  setRoleResponse(null);
+                  setRoleState("idle");
                   setSelectedJob(null);
+                  setJobDescription("");
+                  resetGeneratedResume();
                 }}
                 placeholder="粘贴 JD 链接或整段 JD 文本；多个来源逐行或用空行分隔。"
                 rows={8}
@@ -1817,9 +2012,128 @@ export function ResumeWorkbench() {
                   })}
                 </div>
               </>
+            ) : roleResponse ? (
+              <>
+                <div className="job-stat-grid">
+                  <div>
+                    <span>方向数</span>
+                    <strong>{roleResponse.summary.total}</strong>
+                  </div>
+                  <div>
+                    <span>强匹配</span>
+                    <strong>{roleResponse.summary.strong}</strong>
+                  </div>
+                  <div>
+                    <span>可尝试</span>
+                    <strong>{roleResponse.summary.possible}</strong>
+                  </div>
+                  <div>
+                    <span>需补充</span>
+                    <strong>{roleResponse.summary.weak}</strong>
+                  </div>
+                </div>
+
+                <div className="job-card-list role-card-list">
+                  {roleResponse.recommendations.map((recommendation) => {
+                    const isSelectedRole = selectedJob?.id === recommendation.id;
+
+                    return (
+                      <article
+                        className={`job-card role-card${
+                          isSelectedRole ? " selected" : ""
+                        }`}
+                        key={recommendation.id}
+                      >
+                        <div className="job-card-head">
+                          <div>
+                            <div className="job-pill-row">
+                              <span className="rank-badge">
+                                #{recommendation.id.replace("ROLE-", "")}
+                              </span>
+                              <span
+                                className={
+                                  roleRecommendationLevelClassName[
+                                    recommendation.level
+                                  ]
+                                }
+                              >
+                                {
+                                  roleRecommendationLevelLabel[
+                                    recommendation.level
+                                  ]
+                                }
+                              </span>
+                            </div>
+                            <h4>{recommendation.roleTitle}</h4>
+                            <small>岗位方向推荐｜非具体公司或 JD 链接</small>
+                          </div>
+                          {isSelectedRole ? (
+                            <span className="selected-chip">当前方向</span>
+                          ) : (
+                            <button
+                              className="text-button"
+                              onClick={() =>
+                                handleUseRoleRecommendation(recommendation)
+                              }
+                              type="button"
+                            >
+                              作为目标
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="role-score-row">
+                          <span>相关性 {recommendation.relevanceScore}</span>
+                          <progress
+                            value={recommendation.relevanceScore}
+                            max={100}
+                          />
+                        </div>
+                        <p className="role-description">
+                          {recommendation.roleDescription}
+                        </p>
+                        <p className="role-reason">{recommendation.reason}</p>
+
+                        <div className="keyword-row">
+                          {recommendation.matchedKeywords
+                            .slice(0, 8)
+                            .map((keyword) => (
+                              <span
+                                className="keyword matched-keyword"
+                                key={`${recommendation.id}-${keyword}`}
+                              >
+                                {keyword}
+                              </span>
+                            ))}
+                        </div>
+
+                        {recommendation.matchedFacts.length > 0 ? (
+                          <div className="role-fact-list">
+                            {recommendation.matchedFacts
+                              .slice(0, 3)
+                              .map((fact) => (
+                                <span key={`${recommendation.id}-${fact.id}`}>
+                                  {fact.id}｜{fact.detail}
+                                </span>
+                              ))}
+                          </div>
+                        ) : null}
+
+                        <div className="role-gap-list">
+                          {recommendation.gaps.map((gap) => (
+                            <span key={`${recommendation.id}-${gap}`}>
+                              {gap}
+                            </span>
+                          ))}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </>
             ) : (
               <p className="fact-empty">
-                这里用于把多个 JD 文本或链接先转成统一结构，再选择一个作为定制简历目标。
+                可选输入。没有 JD 时，系统会先回答“这份简历更适合投什么方向”。
               </p>
             )}
           </section>
@@ -1827,7 +2141,11 @@ export function ResumeWorkbench() {
           {selectedJob ? (
             <section className="selected-job-card">
               <div>
-                <p className="eyebrow">Selected Priority JD</p>
+                <p className="eyebrow">
+                  {selectedJob.id.startsWith("ROLE-")
+                    ? "Selected role direction"
+                    : "Selected Priority JD"}
+                </p>
                 <h3>
                   {selectedJob.priorityRank
                     ? `#${selectedJob.priorityRank}｜`
@@ -1837,7 +2155,7 @@ export function ResumeWorkbench() {
                 <p>
                   {selectedJob.company ? `${selectedJob.company}｜` : ""}
                   {selectedJob.score !== undefined
-                    ? `匹配分 ${selectedJob.score}`
+                    ? `${selectedJob.id.startsWith("ROLE-") ? "相关性" : "匹配分"} ${selectedJob.score}`
                     : "未计算匹配分"}
                   {selectedJob.level ? `｜${selectedJob.level}` : ""}
                 </p>
@@ -2360,6 +2678,38 @@ export function ResumeWorkbench() {
                 ))}
               </div>
 
+              {roleResponse ? (
+                <div className="role-discovery-panel">
+                  <div className="section-title">
+                    <div>
+                      <p className="eyebrow">Role discovery</p>
+                      <h2>适合岗位方向</h2>
+                    </div>
+                    <span className="selected-chip">
+                      {roleResponse.summary.total} 个方向
+                    </span>
+                  </div>
+                  <div className="role-discovery-list">
+                    {roleResponse.recommendations.slice(0, 4).map((item) => (
+                      <article key={`preview-${item.id}`}>
+                        <div>
+                          <strong>{item.roleTitle}</strong>
+                          <span>{item.relevanceScore}</span>
+                        </div>
+                        <p>{item.roleDescription}</p>
+                        <button
+                          className="text-button"
+                          onClick={() => handleUseRoleRecommendation(item)}
+                          type="button"
+                        >
+                          作为目标继续
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="preview-metric-grid">
                 <article>
                   <span>准备度</span>
@@ -2373,8 +2723,14 @@ export function ResumeWorkbench() {
                 </article>
                 <article>
                   <span>JD 来源</span>
-                  <strong>{jdSourceCount || (jobDescription.trim() ? 1 : 0)}</strong>
-                  <small>JD 链接 / 文本 / 已选岗位</small>
+                  <strong>
+                    {jdSourceCount || (jobDescription.trim() ? 1 : "可不填")}
+                  </strong>
+                  <small>
+                    {hasJobMaterial
+                      ? "JD 链接 / 文本 / 已选方向"
+                      : "无 JD 时走岗位方向推荐"}
+                  </small>
                 </article>
                 <article>
                   <span>事实库</span>
@@ -2389,9 +2745,15 @@ export function ResumeWorkbench() {
                   <progress value={hasResumeMaterial ? 100 : 0} max={100} />
                 </div>
                 <div className="preview-chart-row">
-                  <span>JD</span>
+                  <span>{hasJobMaterial ? "JD" : "方向"}</span>
                   <progress
-                    value={hasJobSources || hasSelectedJobDescription ? 100 : 0}
+                    value={
+                      hasJobSources ||
+                      hasSelectedJobDescription ||
+                      hasRoleRecommendations
+                        ? 100
+                        : 0
+                    }
                     max={100}
                   />
                 </div>
